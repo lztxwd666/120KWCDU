@@ -1,0 +1,25 @@
+# 忽略所有静态资源目录
+/media/
+/assets/
+/.venv
+/secret_key
+/.pytest_cache
+
+# 忽略特定文件类型
+*.log
+*.tmp
+*.cache
+*.ico
+
+# 忽略生成的文件
+__pycache__/
+*.pyc
+*.pyo
+
+# 忽略 IDE 配置文件
+.idea/
+.vscode/
+
+/font/
+/static_resources/
+/redfish_v1/

@@ -33,7 +33,7 @@ class ModbusTCPConnectionManager:
         self.port = 5000
         self.logger = logging.getLogger("modbus_manager")
         self.quick_check_timeout = 0.2  # 快速检测超时时间(秒)
-        self.logger.info("已设置寄存器144写入回调")
+        self.logger.info("Register 144 has been set to write callback")
 
     def connect(self, ip: str = None, port: int = None) -> bool:
         """连接到Modbus设备"""
@@ -55,7 +55,7 @@ class ModbusTCPConnectionManager:
                         self.logger.warning(f"Error closing old connection: {e}")
 
                 # 创建新连接
-                self.logger.info(f"Modbus已连接到 {self.ip}:{self.port}")
+                self.logger.info(f"Modbus has been connected to {self.ip}:{self.port}")
                 self.client = ModbusTcpClient(
                     host=self.ip,
                     port=self.port,
@@ -64,23 +64,23 @@ class ModbusTCPConnectionManager:
                 )
 
                 if self.client.connect():
-                    self.logger.info("Modbus已成功连接")
+                    self.logger.info("Modbus successfully connected")
                     self.connected = True
                     self.auto_reconnect = True
                     return True
                 else:
-                    self.logger.error("无法连接至Modbus设备")
+                    self.logger.error("Unable to connect to Modbus device")
                     self.client = None
                     return False
 
             # 捕获更具体的异常类型
             except (ConnectionRefusedError, TimeoutError,
                     socket.gaierror, pymodbus.exceptions.ModbusException) as e:
-                self.logger.error(f"Modbus连接错误: {str(e)}")
+                self.logger.error(f"Modbus connection error: {str(e)}")
                 self.client = None
                 return False
             except OSError as e:
-                self.logger.error(f"网络错误: {str(e)}")
+                self.logger.error(f"Network error: {str(e)}")
                 self.client = None
                 return False
 
@@ -88,7 +88,7 @@ class ModbusTCPConnectionManager:
         """区分连接状态和操作超时"""
         # 检查基础连接状态
         if not self.client or not self.client.is_socket_open():
-            self.logger.debug("连接检查: 套接字未打开")
+            self.logger.debug("Connection check: Socket not open")
             return False
 
         try:
@@ -100,17 +100,17 @@ class ModbusTCPConnectionManager:
 
         except pymodbus.exceptions.ConnectionException:
             # 连接级别异常 - 真正的连接问题
-            self.logger.warning("连接检查: 连接异常")
+            self.logger.warning("Connection check: abnormal connection")
             return False
 
         except pymodbus.exceptions.ModbusException as e:
             # Modbus协议级异常 - 可能是设备响应问题
-            self.logger.debug(f"连接检查: Modbus异常 - {str(e)}")
+            self.logger.debug(f"Connection check: Modbus exception - {str(e)}")
             return True  # 仍然认为连接正常
 
         except Exception as e:
             # 其他异常 - 视为连接问题
-            self.logger.warning(f"连接检查: 未知异常 - {str(e)}")
+            self.logger.warning(f"Connection check: Unknown exception - {str(e)}")
             return False
 
     def _safe_write_register(self, address, value):
@@ -122,16 +122,16 @@ class ModbusTCPConnectionManager:
     def disconnect(self):
         disconnect_success = True
         if self.connected and self.is_connected():
-            self.logger.info("断开前写入寄存器144值0")
+            self.logger.info("Write register 144 value 0 before disconnection")
             try:
                 if not loop_writer_manager.write_disconnect_value():
-                    self.logger.error("无法写入断开值0，无法安全断开连接")
+                    self.logger.error("Unable to write disconnect value 0, unable to safely disconnect")
                     disconnect_success = False
             except Exception as e:
-                self.logger.error(f"写入断开值出错: {str(e)}")
+                self.logger.error(f"Error writing disconnect value: {str(e)}")
                 disconnect_success = False
         else:
-            self.logger.info("连接已断开，跳过写入值0")
+            self.logger.info("Connection disconnected, skipping writing value 0")
 
         # 执行断开操作
         with self.connection_lock:
@@ -139,7 +139,7 @@ class ModbusTCPConnectionManager:
             if self.client and self.connected:
                 try:
                     self.client.close()
-                    self.logger.info("Modbus连接断开")
+                    self.logger.info("Modbus connection disconnected")
                 except (ConnectionError, OSError) as e:
                     self.logger.error(f"Error closing Modbus connection: {str(e)}")
                     disconnect_success = False
@@ -168,14 +168,14 @@ class ModbusTCPConnectionManager:
 
             # 检查响应是否有效
             if result.isError():
-                self.logger.warning(f"连接响应错误: {str(result)}")
+                self.logger.warning(f"Connection response error: {str(result)}")
                 return False
 
             return True
         except Exception as e:
             # 记录异常但不要重复记录相同错误
             if "WinError 10054" not in str(e):
-                self.logger.error(f"连接验证失败: {str(e)}")
+                self.logger.error(f"Connection verification failed: {str(e)}")
             return False
 
     def start_connection_monitor(self):
@@ -232,7 +232,7 @@ def safe_modbus_call(func, *args, **kwargs):
     for attempt in range(max_retries):
         client = modbus_manager.get_client()
         if not client:
-            modbus_manager.logger.error("无可用的Modbus连接")
+            modbus_manager.logger.error("No available Modbus connection")
             return None
 
         try:

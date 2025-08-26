@@ -1,7 +1,7 @@
 # 忽略所有静态资源目录
 /media/
-/assets/
 /.venv
+/.vs
 /secret_key
 /.pytest_cache
 
@@ -21,5 +21,4 @@ __pycache__/
 .vscode/
 
 /font/
-/static_resources/
 /redfish_v1/

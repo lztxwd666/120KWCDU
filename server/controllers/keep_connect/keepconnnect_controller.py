@@ -46,12 +46,12 @@ def check_timeout(app):
     current_time = time.time()
     with app.app_context():
         time_diff = current_time - last_request_time
-        app.logger.debug(f"超时检测: 时间差={time_diff:.1f}s")
+        app.logger.debug(f"Timeout detection: time difference={time_diff:.1f}s")
 
         if time_diff > 60:
             controller = app.config.get('CONTROLLER')
             if controller and modbus_manager.is_connected():
-                app.logger.info(f"检测到超时 ({time_diff:.1f}s > 60s)，停止服务")
+                app.logger.info(f"Timeout detected ({time_diff:.1f}s > 60s)，Service terminated")
                 controller.stop_service()
 
     timeout_timer = threading.Timer(5.0, check_timeout, args=(app,))
@@ -64,7 +64,7 @@ def start_keepalive_timer(app=None):
     if app is None:
         from flask import current_app
         app = current_app._get_current_object()
-    app.logger.info("启动keepalive定时器")
+    app.logger.info("Start the Keepalive timer")
     if timeout_timer and timeout_timer.is_alive():
         timeout_timer.cancel()
     timeout_timer = threading.Timer(5.0, check_timeout, args=(app,))

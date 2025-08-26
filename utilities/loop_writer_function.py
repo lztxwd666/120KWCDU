@@ -25,7 +25,7 @@ class LoopWriterManager:
             name="RegisterWriterMonitor"
         )
         self.monitor_thread.start()
-        self.logger.info("统一寄存器写入管理器已启动")
+        self.logger.info("Unified Register Write Manager has started")
 
     def _monitor_connection(self):
         from modbustcp_manager.modbustcp_manager import modbus_manager
@@ -34,10 +34,10 @@ class LoopWriterManager:
             current_connected = modbus_manager.is_connected()
             if current_connected != last_connected:
                 if current_connected:
-                    self.logger.info("检测到连接建立，启动写入线程")
+                    self.logger.info("Detected connection establishment, started write thread")
                     self.start_writing()
                 else:
-                    self.logger.info("检测到连接断开，停止写入线程")
+                    self.logger.info("Detected disconnection, stop writing thread")
                     self.stop_writing()
                 last_connected = current_connected
             self.monitor_stop_event.wait(1)  # 用wait替代sleep，便于快速退出
@@ -54,7 +54,7 @@ class LoopWriterManager:
                 name="RegisterWriterThread"
             )
             self.write_thread.start()
-            self.logger.info("寄存器写入线程已启动")
+            self.logger.info("Register write thread started")
 
     def stop_writing(self):
         with self.lock:
@@ -63,9 +63,9 @@ class LoopWriterManager:
             if self.write_thread and self.write_thread.is_alive():
                 self.write_thread.join(timeout=2)
                 if self.write_thread.is_alive():
-                    self.logger.warning("寄存器写入线程未能及时停止")
+                    self.logger.warning("Register write thread failed to stop in time")
                 else:
-                    self.logger.info("寄存器写入线程已停止")
+                    self.logger.info("Register write thread has stopped")
             self.write_thread = None
 
     def stop_all(self):
@@ -75,14 +75,14 @@ class LoopWriterManager:
         if self.monitor_thread and self.monitor_thread.is_alive():
             self.monitor_thread.join(timeout=2)
             if self.monitor_thread.is_alive():
-                self.logger.warning("监控线程未能及时停止")
+                self.logger.warning("The monitoring thread failed to stop in a timely manner")
             else:
-                self.logger.info("监控线程已停止")
+                self.logger.info("Monitoring thread has stopped")
         self.monitor_thread = None
 
     def _write_loop(self):
         from modbustcp_manager.modbustcp_manager import safe_modbus_call
-        self.logger.info("开始循环写入寄存器144和1538")
+        self.logger.info("Start looping to write to registers 144 and 1538")
         self._write_144_until_success(1)
         last_144 = self.value_144
         last_1538 = self.value_1538
@@ -92,36 +92,36 @@ class LoopWriterManager:
                 try:
                     safe_modbus_call(lambda c: c.write_register(144, self.value_144, slave=1))
                     if self.value_144 != last_144:
-                        self.logger.info(f"寄存器144写入新值: {self.value_144}")
+                        self.logger.info(f"Register 144 writes a new value: {self.value_144}")
                         last_144 = self.value_144
                 except Exception as e:
-                    self.logger.error(f"写入寄存器144失败: {e}")
+                    self.logger.error(f"Writing to register 144 failed: {e}")
                 self.last_write_144 = now
             if int(now - self.last_write_1538) >= self.interval_1538:
                 try:
                     safe_modbus_call(lambda c: c.write_register(1538, self.value_1538, slave=1))
                     if self.value_1538 != last_1538:
-                        self.logger.info(f"寄存器1538写入新值: {self.value_1538}")
+                        self.logger.info(f"Register 1538 writes a new value: {self.value_1538}")
                         last_1538 = self.value_1538
                 except Exception as e:
-                    self.logger.error(f"写入寄存器1538失败: {e}")
+                    self.logger.error(f"Failed to write to register 1538: {e}")
                 self.last_write_1538 = now
             self.stop_event.wait(0.1)
 
     def set_value_144(self, value: int):
         with self.lock:
             if self.value_144 != value:
-                self.logger.info(f"寄存器144已写入: {value}")
+                self.logger.info(f"Register 144 has been written: {value}")
             self.value_144 = value
 
     def set_value_1538(self, value: int):
         with self.lock:
             if self.value_1538 != value:
-                self.logger.info(f"寄存器1538已写入: {value}")
+                self.logger.info(f"Register 1538 has been written: {value}")
             self.value_1538 = value
 
     def write_disconnect_value(self):
-        self.logger.info("准备断开连接，写入寄存器144值0")
+        self.logger.info("Prepare to disconnect and write register 144 with a value of 0")
         return self._write_144_until_success(0)
 
     def _write_144_until_success(self, value):
@@ -134,7 +134,7 @@ class LoopWriterManager:
             try:
                 safe_modbus_call(lambda c: c.write_register(144, value, slave=1))
             except Exception as e:
-                self.logger.error(f"写入寄存器144失败: {e}")
+                self.logger.error(f"Writing to register 144 failed: {e}")
                 time.sleep(0.1)
                 continue
             try:
@@ -142,17 +142,17 @@ class LoopWriterManager:
                     lambda c: c.read_holding_registers(address=144, count=1, slave=1)
                 )
                 if read_result and read_result.registers and read_result.registers[0] == value:
-                    self.logger.info(f"寄存器144值{value}写入并验证成功")
+                    self.logger.info(f"Register 144 value {value} written and verified successfully")
                     success = True
                     break
                 else:
                     read_value = read_result.registers[0] if read_result and read_result.registers else "N/A"
-                    self.logger.warning(f"寄存器144值{value}验证失败 (实际值: {read_value})")
+                    self.logger.warning(f"Register 144 value {value} validation failed (actual value: {read_value})")
             except Exception as e:
-                self.logger.error(f"读取验证失败: {e}")
+                self.logger.error(f"Read verification failed: {e}")
             time.sleep(0.1)
         if not success:
-            self.logger.error(f"寄存器144值{value}写入失败，超过最大尝试次数")
+            self.logger.error(f"Register 144 value {value} write failed, exceeding the maximum number of attempts")
         return success
 
 

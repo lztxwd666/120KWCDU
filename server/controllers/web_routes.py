@@ -17,7 +17,7 @@ def configure_web_routes(app: Flask):
 
     # 确保路径存在
     if not os.path.exists(static_dir):
-        raise FileNotFoundError(f"静态资源目录不存在: {static_dir}")
+        raise FileNotFoundError(f"The static resource directory does not exist: {static_dir}")
 
     # 提供静态资源
     @app.route("/assets/<path:filename>")
@@ -33,10 +33,10 @@ def configure_web_routes(app: Flask):
         """提供单页应用入口 (捕获所有GET请求)"""
         # 只处理GET请求，其他请求类型返回405
         if request.method != 'GET':
-            return "方法不允许", 405
+            return "Method Not Allowed", 405
 
         # 路径验证)
-        print(f"服务SPA入口: {static_dir}/index.html")
+        print(f"Service SPA entrance: {static_dir}/index.html")
         return send_from_directory(static_dir, 'index.html')
 
     # 添加404错误处理 (确保API优先)
@@ -46,9 +46,9 @@ def configure_web_routes(app: Flask):
         # 如果是 API 请求，返回 JSON 格式的 404
         if request.path.startswith('/api/') or request.path.startswith('/redfish/'):
             return {
-                'error': '未找到',
+                'error': 'Not found',
                 'code': 404,
-                'message': '请求的资源不存在'
+                'message': 'The requested resource does not exist'
             }, 404
 
         # 否则返回前端 SPA 入口
@@ -79,11 +79,11 @@ def configure_web_routes(app: Flask):
 #
 #     # 确保路径存在
 #     if not os.path.exists(static_dir):
-#         app.logger.error(f"静态资源目录不存在: {static_dir}")
+#         app.logger.error(f"The static resource directory does not exist: {static_dir}")
 #         # 尝试使用备选路径
 #         static_dir = os.path.join(os.getcwd(), 'static_resources')
 #         if not os.path.exists(static_dir):
-#             raise FileNotFoundError(f"静态资源目录不存在: {static_dir}")
+#             raise FileNotFoundError(f"The static resource directory does not exist: {static_dir}")
 #
 #     # 提供静态资源文件 (JS/CSS/图片等)
 #     @app.route("/assets/<path:filename>")
@@ -96,7 +96,7 @@ def configure_web_routes(app: Flask):
 #     @app.route('/<path:path>', methods=['GET'])
 #     def serve_spa(path):
 #         if request.method != 'GET':
-#             return "方法不允许", 405
+#             return "Method Not Allowed", 405
 #         return send_from_directory(static_dir, 'index.html')
 #
 #     # 添加 404 错误处理
@@ -104,8 +104,8 @@ def configure_web_routes(app: Flask):
 #     def handle_404(e):
 #         if request.path.startswith('/api/') or request.path.startswith('/redfish/'):
 #             return {
-#                 'error': '未找到',
+#                 'error': 'Not found',
 #                 'code': 404,
-#                 'message': '请求的资源不存在'
+#                 'message': 'The requested resource does not exist'
 #             }, 404
 #         return send_from_directory(static_dir, 'index.html')

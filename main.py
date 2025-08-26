@@ -15,23 +15,13 @@ lock_file_handle: Optional[TextIO] = None
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# 兼容不同Python版本的StreamHandler中文输出
-if sys.version_info >= (3, 9):
-    console_handler = logging.StreamHandler(sys.stdout, encoding="utf-8")
-else:
-
-    if sys.stdout.encoding.lower() != "utf-8":
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-    console_handler = logging.StreamHandler(sys.stdout)
-file_handler = logging.handlers.TimedRotatingFileHandler(
+file_handler = TimedRotatingFileHandler(
     filename="app.log", when="midnight", interval=1, backupCount=7, encoding="utf-8"
 )
+console_handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(formatter)
 console_handler.setFormatter(formatter)
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
@@ -53,9 +43,9 @@ def cleanup_lock_file():
         try:
             portalocker.unlock(lock_file_handle)
             lock_file_handle.close()
-            logging.info("锁文件已释放")
+            logging.info("The lock file has been released")
         except Exception as cleanup_error:
-            logging.warning(f"释放锁文件失败: {cleanup_error}")
+            logging.warning(f"Failed to release lock file: {cleanup_error}")
 
 
 if __name__ == "__main__":
@@ -65,16 +55,16 @@ if __name__ == "__main__":
         sys.exit(1)
 
     atexit.register(cleanup_lock_file)
-    logger.info("应用程序启动中...")
+    logger.info("Application startup in progress...")
 
     try:
         controller = AppController()
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("收到中断信号，正在清理资源...")
+        logger.info("Received interrupt signal, clearing resources...")
         controller.cleanup()
         sys.exit(0)
     except Exception as startup_error:
-        logger.exception(f"应用程序启动失败: {str(startup_error)}")
+        logger.exception(f"Application startup failed: {str(startup_error)}")
         sys.exit(1)

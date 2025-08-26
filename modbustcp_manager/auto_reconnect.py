@@ -28,7 +28,7 @@ class AutoReconnectManager:
         self.reconnect_attempts = 0
         self.is_reconnecting = False
         self._start_heartbeat_timer()
-        self.logger.info("自动重连监控已启动")
+        self.logger.info("Automatic reconnection monitoring has been initiated")
 
     def stop(self):
         self.active = False
@@ -40,7 +40,7 @@ class AutoReconnectManager:
             self.heartbeat_timer.cancel()
         if self.reconnect_timer:
             self.reconnect_timer.cancel()
-        self.logger.info("自动重连监控已停止")
+        self.logger.info("Automatic reconnection monitoring has stopped")
 
     def is_active(self):
         return self.active
@@ -69,10 +69,10 @@ class AutoReconnectManager:
                 if self.heartbeat_fail_count >= self.heartbeat_fail_threshold:
                     if self.active and not self.stop_requested:
                         self.is_reconnecting = True
-                        self.logger.warning("连接丢失，尝试重连...")
+                        self.logger.warning("Connection lost, try reconnecting...")
                         self._start_reconnect_timer()
         except Exception as e:
-            self.logger.error(f"心跳检测异常: {str(e)}")
+            self.logger.error(f"Abnormal heartbeat detection: {str(e)}")
             self.heartbeat_fail_count += 1
         self._start_heartbeat_timer()
 
@@ -87,18 +87,18 @@ class AutoReconnectManager:
             return
 
         self.reconnect_attempts += 1
-        self.logger.warning(f"尝试重连 (尝试 #{self.reconnect_attempts})")
+        self.logger.warning(f"Attempt to reconnect (Attempt #{self.reconnect_attempts})")
         success = False
         try:
             ip = self.conn_manager.ip
             port = self.conn_manager.port
-            self.logger.info(f"尝试重连到 {ip}:{port}")
+            self.logger.info(f"Attempt to reconnect to {ip}:{port}")
 
             self.conn_manager.disconnect()
             success = self.conn_manager.connect(ip, port)
 
             if success:
-                self.logger.info("重连成功")
+                self.logger.info("Reconnect successfully")
                 self.reconnect_attempts = 0
                 self.heartbeat_fail_count = 0
                 self.is_reconnecting = False
@@ -106,9 +106,9 @@ class AutoReconnectManager:
                     self.reconnect_callback()
                 return
             else:
-                self.logger.warning("重连失败，稍后重试")
+                self.logger.warning("Reconnect failed, try again later")
         except Exception as e:
-            self.logger.error(f"重连尝试异常: {str(e)}")
+            self.logger.error(f"Reconnect attempt exception: {str(e)}")
 
         if self.active and not self.stop_requested:
             self.reconnect_timer = threading.Timer(self.reconnect_interval, self._attempt_reconnect)

@@ -15,13 +15,23 @@ lock_file_handle: Optional[TextIO] = None
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-file_handler = TimedRotatingFileHandler(
+
+# 兼容不同Python版本的StreamHandler中文输出
+if sys.version_info >= (3, 9):
+    console_handler = logging.StreamHandler(sys.stdout, encoding="utf-8")
+else:
+
+    if sys.stdout.encoding.lower() != "utf-8":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    console_handler = logging.StreamHandler(sys.stdout)
+file_handler = logging.handlers.TimedRotatingFileHandler(
     filename="app.log", when="midnight", interval=1, backupCount=7, encoding="utf-8"
 )
-console_handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(formatter)
 console_handler.setFormatter(formatter)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 

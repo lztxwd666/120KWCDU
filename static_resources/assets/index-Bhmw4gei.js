@@ -1,0 +1,1 @@
+import{d as t,o as n,u as a,c as r,a as s,r as c,b as d}from"./index-EpIlRf8H.js";const _={flex:"1"},l=t({name:"IndexPage",__name:"index",setup(u){const e=a();return n(()=>{e.replace("/redfish/dashboard")}),(p,i)=>{const o=c("RouterView");return d(),r("div",_,[s(o)])}}});export{l as default};

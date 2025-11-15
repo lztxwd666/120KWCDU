@@ -1,0 +1,451 @@
+
+  "network_link": {
+    "config": {
+      "before_network_address": 3202,
+      "after_network_online_numaddress": 3256,
+      "after_network_numaddress": 3261,
+      "id_startaddress": 3264,
+      "online_state_startaddress": 3262,
+      "master_noaddress": 3257,
+      "local_noaddress": 3258,
+      "role_address": 3259,
+      "framework_address": 3260
+    }
+  },
+  "msgs": [
+    {
+      "name": "ControlRevision",
+      "config": {
+        "name": "ControlRevision",
+        "r_control_revision_address": 500,
+        "len": 12
+      }
+    }
+  ],
+  "valves": [
+  ],
+  "intputs": [
+    {
+      "name": "X0",
+      "config": {
+        "name": "X0",
+        "r_intput_b_register_address": {
+          "local": 0,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X1",
+      "config": {
+        "name": "X1",
+        "r_intput_b_register_address": {
+          "local": 1,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X2",
+      "config": {
+        "name": "X2",
+        "r_intput_b_register_address": {
+          "local": 2,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X3",
+      "config": {
+        "name": "X3",
+        "r_intput_b_register_address": {
+          "local": 3,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X4",
+      "config": {
+        "name": "X4",
+        "r_intput_b_register_address": {
+          "local": 4,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X5",
+      "config": {
+        "name": "X5",
+        "r_intput_b_register_address": {
+          "local": 5,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X10",
+      "config": {
+        "name": "X10",
+        "r_intput_b_register_address": {
+          "local": 8,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X11",
+      "config": {
+        "name": "X11",
+        "r_intput_b_register_address": {
+          "local": 9,
+          "remote": 0
+        }
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Y0",
+      "config": {
+        "name": "Y0",
+        "rw_output_b_register_address": {
+          "local": 768,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y1",
+      "config": {
+        "name": "Y1",
+        "rw_output_b_register_address": {
+          "local": 769,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y2",
+      "config": {
+        "name": "Y2",
+        "rw_output_b_register_address": {
+          "local": 770,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y3",
+      "config": {
+        "name": "Y3",
+        "rw_output_b_register_address": {
+          "local": 771,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y4",
+      "config": {
+        "name": "Y4",
+        "rw_output_b_register_address": {
+          "local": 772,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y5",
+      "config": {
+        "name": "Y5",
+        "rw_output_b_register_address": {
+          "local": 773,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y6",
+      "config": {
+        "name": "Y6",
+        "rw_output_b_register_address": {
+          "local": 774,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y7",
+      "config": {
+        "name": "Y7",
+        "rw_output_b_register_address": {
+          "local": 775,
+          "remote": 0
+        }
+      }
+    }
+  ],
+  "bool_collects": [
+    {
+      "name": "FansBroadcast_On",
+      "config": {
+        "name": "FansBroadcast_On",
+        "rw_switch_b_register_address": {
+          "local": 49392,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "FansBroadcast_Off",
+      "config": {
+        "name": "FansBroadcast_Off",
+        "rw_switch_b_register_address": {
+          "local": 49393,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "ConnetNetWork_On",
+      "config": {
+        "name": "ConnetNetWork_On",
+        "rw_switch_b_register_address": {
+          "local": 52080,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "ConnetNetWork_Off",
+      "config": {
+        "name": "ConnetNetWork_Off",
+        "rw_switch_b_register_address": {
+          "local": 52081,
+          "remote": 0
+        }
+      }
+    }
+  ],
+  "float_collects": [
+    {
+      "name": "WebMode",
+      "config": {
+        "name": "WebMode",
+        "switch_d_register_address": {
+          "local": 144,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    },
+    {
+      "name": "WorkMode",
+      "config": {
+        "name": "WorkMode",
+        "switch_d_register_address": {
+          "local": 154,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    },
+    {
+      "name": "Power1",
+      "config": {
+        "name": "Power1",
+        "switch_d_register_address": {
+          "local": 2059,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 1
+      }
+    },
+    {
+      "name": "Power2",
+      "config": {
+        "name": "Power2",
+        "switch_d_register_address": {
+          "local": 2091,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 1
+      }
+    },
+    {
+      "name": "Power3",
+      "config": {
+        "name": "Power3",
+        "switch_d_register_address": {
+          "local": 2060,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 1
+      }
+    },
+    {
+      "name": "fansBroadcast_duty",
+      "config": {
+        "name": "fansBroadcast_duty",
+        "switch_d_register_address": {
+          "local": 3088,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_WorkState",
+      "config": {
+        "name": "Multi_WorkState",
+        "switch_d_register_address": {
+          "local": 3840,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    },
+    {
+      "name": "Multi_WorkMode",
+      "config": {
+        "name": "Multi_WorkMode",
+        "switch_d_register_address": {
+          "local": 3841,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    },
+    {
+      "name": "Multi_TemperatureTarget",
+      "config": {
+        "name": "Multi_TemperatureTarget",
+        "switch_d_register_address": {
+          "local": 3845,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_FlowTarget",
+      "config": {
+        "name": "Multi_FlowTarget",
+        "switch_d_register_address": {
+          "local": 3846,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_PressureTarget",
+      "config": {
+        "name": "Multi_PressureTarget",
+        "switch_d_register_address": {
+          "local": 3847,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_TemperatureTotalTarget",
+      "config": {
+        "name": "Multi_TemperatureTotalTarget",
+        "switch_d_register_address": {
+          "local": 3848,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_FlowTotalTarget",
+      "config": {
+        "name": "Multi_FlowTotalTarget",
+        "switch_d_register_address": {
+          "local": 3849,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_PressureTotalTarget",
+      "config": {
+        "name": "Multi_PressureTotalTarget",
+        "switch_d_register_address": {
+          "local": 3850,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_fansBroadcast_Id",
+      "config": {
+        "name": "Multi_fansBroadcast_Id",
+        "switch_d_register_address": {
+          "local": 3855,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    },
+    {
+      "name": "Multi_fansBroadcast_Switch",
+      "config": {
+        "name": "Multi_fansBroadcast_Switch",
+        "switch_d_register_address": {
+          "local": 3856,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    },
+    {
+      "name": "Multi_fansBroadcast_duty",
+      "config": {
+        "name": "Multi_fansBroadcast_duty",
+        "switch_d_register_address": {
+          "local": 3857,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 2
+      }
+    },
+    {
+      "name": "Multi_PageNum",
+      "config": {
+        "name": "Multi_PageNum",
+        "switch_d_register_address": {
+          "local": 3858,
+          "remote": 0
+        },
+        "len": 1,
+        "decimals": 0
+      }
+    }
+  ]
+}

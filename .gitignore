@@ -1,9 +1,7 @@
 # 忽略所有静态资源目录
 /media/
 /.venv
-/.vs
-/secret_key
-/.pytest_cache
+/bin
 
 # 忽略特定文件类型
 *.log
@@ -21,4 +19,5 @@ __pycache__/
 .vscode/
 
 /font/
-/redfish_v1/
+/log/
+/dist

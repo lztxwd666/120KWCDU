@@ -1,0 +1,14 @@
+﻿{
+  "low_frequency_tasks": [
+    {
+      "name": "RTUHeartbeat",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 1000,
+      "start_address": 0,
+      "length": 1
+    }
+  ]
+}

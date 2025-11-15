@@ -1,0 +1,154 @@
+﻿{
+  "tasks": [
+    {
+      "name": "IOTask",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 0,
+      "length": 125
+    },
+    {
+      "name": "IOTask2",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": true,
+      "interval": 100,
+      "start_address": 768,
+      "length": 125
+    },
+    {
+      "name": "FreeTask",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 144,
+      "length": 125
+    },
+    {
+      "name": "FanAndPumpTask1",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 1808,
+      "length": 125
+    },
+    {
+      "name": "FanAndPumpTask2",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 1920,
+      "length": 125
+    },
+    {
+      "name": "FanAndPumpTask3",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 2040,
+      "length": 125
+    },
+    {
+      "name": "FanAndPumpTask4",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 2160,
+      "length": 125
+    },
+    {
+      "name": "FanAndPumpTask5",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 2560,
+      "length": 125
+    },
+    {
+      "name": "FanAndPumpTask6",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 2685,
+      "length": 125
+    },
+    {
+      "name": "NetworkTask1",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 3136,
+      "length": 125
+    },
+    {
+      "name": "NetworkTask2",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 3260,
+      "length": 125
+    },
+    {
+      "name": "NetworkTask3",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 3840,
+      "length": 125
+    },
+    {
+      "name": "ValveTask2",
+      "communication_type": 0,
+      "communication_operation_type": 0,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 3386,
+      "length": 125
+    },
+    {
+      "name": "Revision1",
+      "communication_type": 0,
+      "communication_operation_type": 1,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 488,
+      "length": 32
+    },
+    {
+      "name": "Revision2",
+      "communication_type": 0,
+      "communication_operation_type": 1,
+      "communication_level_type": 0,
+      "is_bit": false,
+      "interval": 100,
+      "start_address": 3584,
+      "length": 64
+    }
+  ]
+}

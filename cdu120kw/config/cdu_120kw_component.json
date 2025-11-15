@@ -1,0 +1,323 @@
+﻿{
+  "fans": [
+    {
+      "name": "Fan1",
+      "config": {
+        "name": "Fan1",
+        "rw_b_switch_register_address": {
+          "local": 784,
+          "remote": 0
+        },
+        "r_d_current_address": {
+          "local": 3401,
+          "remote": 0
+        },
+        "r_d_current_decimals": 3,
+        "enabled": true
+      }
+    },
+    {
+      "name": "Fan2",
+      "config": {
+        "name": "Fan2",
+        "rw_b_switch_register_address": {
+          "local": 785,
+          "remote": 0
+        },
+        "r_d_current_address": {
+          "local": 3402,
+          "remote": 0
+        },
+        "r_d_current_decimals": 3,
+        "enabled": true
+      }
+    },
+    {
+      "name": "Fan3",
+      "config": {
+        "name": "Fan3",
+        "rw_b_switch_register_address": {
+          "local": 786,
+          "remote": 0
+        },
+        "r_d_current_address": {
+          "local": 3403,
+          "remote": 0
+        },
+        "r_d_current_decimals": 3,
+        "enabled": true
+      }
+    }
+  ],
+  "pumps": [
+    {
+      "name": "Pump1",
+      "config": {
+        "name": "Pump1",
+        "rw_d_duty_register_address": {
+          "local": 2192,
+          "remote": 0
+        },
+        "rw_d_duty_decimals": 0,
+        "r_d_speed_address": {
+          "local": 2080,
+          "remote": 0
+        },
+        "r_d_speed_decimals": 0,
+        "r_d_current_address": {
+          "local": 2081,
+          "remote": 0
+        },
+        "r_d_current_decimals": 3,
+        "enabled": true,
+        "min_duty": 0,
+        "max_duty": 100
+      }
+    },
+    {
+      "name": "Pump2",
+      "config": {
+        "name": "Pump2",
+        "rw_d_duty_register_address": {
+          "local": 2193,
+          "remote": 0
+        },
+        "rw_d_duty_decimals": 0,
+        "r_d_speed_address": {
+          "local": 2082,
+          "remote": 0
+        },
+        "r_d_speed_decimals": 0,
+        "r_d_current_address": {
+          "local": 2083,
+          "remote": 0
+        },
+        "r_d_current_decimals": 3,
+        "enabled": true,
+        "min_duty": 0,
+        "max_duty": 100
+      }
+    }
+  ],
+  "proportional_valve": [
+    {
+      "name": "Pv",
+      "config": {
+        "name": "Pv",
+        "rw_d_duty_register_address": {
+          "local": 3426,
+          "remote": 0
+        },
+        "rw_d_duty_decimals": 2,
+        "r_d_voltage_address": {
+          "local": 3400,
+          "remote": 0
+        },
+        "r_d_voltage_decimals": 2,
+        "enabled": true,
+        "min_duty": 0,
+        "max_duty": 100
+      }
+    }
+  ],
+  "sensor": [
+    {
+      "name": "T1",
+      "config": {
+        "name": "T1",
+        "r_d_temperature_address": {
+          "local": 3328,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_temperature": 0,
+        "max_temperature": 60
+      }
+    },
+    {
+      "name": "T2",
+      "config": {
+        "name": "T2",
+        "r_d_temperature_address": {
+          "local": 3329,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_temperature": 0,
+        "max_temperature": 60
+      }
+    },
+    {
+      "name": "T3",
+      "config": {
+        "name": "T3",
+        "r_d_temperature_address": {
+          "local": 3330,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_temperature": 0,
+        "max_temperature": 60
+      }
+    },
+    {
+      "name": "T4",
+      "config": {
+        "name": "T4",
+        "r_d_temperature_address": {
+          "local": 3331,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_temperature": 0,
+        "max_temperature": 60
+      }
+    },
+    {
+      "name": "P1",
+      "config": {
+        "name": "P1",
+        "r_d_pressure_address": {
+          "local": 3392,
+          "remote": 0
+        },
+        "r_d_pressure_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 37.1875,
+        "gain3": 1.0,
+        "min_pressure": 5,
+        "max_pressure": 600
+      }
+    },
+    {
+      "name": "P2",
+      "config": {
+        "name": "P2",
+        "r_d_pressure_address": {
+          "local": 3393,
+          "remote": 0
+        },
+        "r_d_pressure_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 37.1875,
+        "gain3": 1.0,
+        "min_pressure": 5,
+        "max_pressure": 600
+      }
+    },
+    {
+      "name": "P3",
+      "config": {
+        "name": "P3",
+        "r_d_pressure_address": {
+          "local": 3394,
+          "remote": 0
+        },
+        "r_d_pressure_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 37.1875,
+        "gain3": 1.0,
+        "min_pressure": 5,
+        "max_pressure": 600
+      }
+    },
+    {
+      "name": "P4",
+      "config": {
+        "name": "P4",
+        "r_d_pressure_address": {
+          "local": 3395,
+          "remote": 0
+        },
+        "r_d_pressure_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 37.1875,
+        "gain3": 1.0,
+        "min_pressure": 5,
+        "max_pressure": 600
+      }
+    },
+    {
+      "name": "F1",
+      "config": {
+        "name": "F1",
+        "r_d_flow_address": {
+          "local": 3397,
+          "remote": 0
+        },
+        "r_d_flow_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 18.6875,
+        "gain3": 1.0,
+        "min_flow": 1,
+        "max_flow": 300
+      }
+    },
+    {
+      "name": "F2",
+      "config": {
+        "name": "F2",
+        "r_d_flow_address": {
+          "local": 3398,
+          "remote": 0
+        },
+        "r_d_flow_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 18.6875,
+        "gain3": 1.0,
+        "min_flow": 1,
+        "max_flow": 300
+      }
+    },
+    {
+      "name": "PH",
+      "config": {
+        "name": "PH",
+        "r_d_ph_address": {
+          "local": 3399,
+          "remote": 0
+        },
+        "r_d_ph_decimals": 1,
+        "offset1": -4000,
+        "offset2": 0,
+        "gain1": 0.001,
+        "gain2": 0.875,
+        "gain3": 1.0,
+        "min_ph": 0,
+        "max_ph": 14
+      }
+    }
+  ]
+}

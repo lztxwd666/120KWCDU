@@ -1,0 +1,46 @@
+{
+  "modbus_tcp": {
+    "ip": "192.168.1.150",
+    "port": 5000
+  },
+  "modbus_rtu": {
+    "port": "COM10",
+    "baud_rate": 115200,
+    "byte_size": 8,
+    "parity": "N",
+    "stop_bits": 1,
+    "timeout": 1.0
+  },
+  "modbus_hmi": {
+    "rtu": {
+      "port": "COM13",
+      "baud_rate": 115200,
+      "byte_size": 8,
+      "parity": "N",
+      "stop_bits": 1,
+      "timeout": 1.0
+    },
+    "tcp": {
+      "ip": "192.168.1.151",
+      "port": 5002
+    },
+    "identity": {
+      "VendorName": "CDU120KW",
+      "ProductCode": "HMI",
+      "VendorUrl": "https://github.com/lztxwd666",
+      "ProductName": "CDU120KW HMI Modbus Server",
+      "ModelName": "CDU120KW",
+      "MajorMinorRevision": "1.0"
+    }
+  },
+  "flask": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "threads": 4,
+    "secret_key": "default-secret-key",
+    "debug": false
+  },
+  "log": {
+    "level": "INFO"
+  }
+}

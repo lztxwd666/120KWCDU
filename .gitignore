@@ -3,6 +3,10 @@
 /.venv
 /bin
 
+node_modules/
+dist/
+build/
+
 # 忽略特定文件类型
 *.log
 *.tmp
@@ -21,3 +25,8 @@ __pycache__/
 /font/
 /log/
 /dist
+
+.DS_Store
+Thumbs.db
+
+cdu120kw/config/ai˵��.txt

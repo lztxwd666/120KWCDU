@@ -1,0 +1,183 @@
+2025-11-15 13:22:06,319 - INFO - Application startup in progress...
+2025-11-15 13:22:09,327 - WARNING - TCP connection lost, start reconnecting...
+2025-11-15 13:22:09,328 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 13:22:09,328 - INFO - Switch hosted mode: tcp -> none
+2025-11-15 13:22:09,328 - WARNING - Register read failed(none): IOTask, error: ConnectionError
+2025-11-15 13:22:09,328 - INFO - Task execution failed, will retry after connection recovery...
+2025-11-15 13:22:09,328 - INFO - Polling paused, waiting for connection recovery...
+2025-11-15 13:22:09,329 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 13:22:09,329 - INFO - Auto reconnection monitoring started
+2025-11-15 13:22:09,329 - INFO - Auto reconnection monitoring started
+2025-11-15 13:22:09,332 - INFO - Flask service thread started
+2025-11-15 13:22:09,335 - INFO - Server listening.
+2025-11-15 13:22:09,335 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 13:22:25,419 - INFO - TCP connection re-established successfully
+2025-11-15 13:22:25,419 - INFO - TCP reconnect successfully
+2025-11-15 13:22:25,419 - INFO - Reconnect callback submitted to thread pool
+2025-11-15 13:22:25,419 - INFO - Switch hosted mode: none -> tcp
+2025-11-15 13:22:27,481 - INFO - Received interrupt signal, clearing resources...
+2025-11-15 13:22:27,481 - INFO - Clean up resources
+2025-11-15 13:22:27,481 - INFO - Service termination
+2025-11-15 13:22:30,411 - INFO - Application startup in progress...
+2025-11-15 13:22:30,413 - INFO - TCP connection re-established successfully
+2025-11-15 13:22:30,413 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 13:22:30,413 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 13:22:30,414 - INFO - Auto reconnection monitoring started
+2025-11-15 13:22:30,414 - INFO - Auto reconnection monitoring started
+2025-11-15 13:22:30,417 - INFO - Flask service thread started
+2025-11-15 13:22:30,419 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 13:22:30,432 - INFO - Server listening.
+2025-11-15 13:28:23,733 - INFO - Received interrupt signal, clearing resources...
+2025-11-15 13:28:23,734 - INFO - Clean up resources
+2025-11-15 13:28:23,734 - INFO - Service termination
+2025-11-15 13:49:28,079 - INFO - Application startup in progress...
+2025-11-15 13:49:28,082 - INFO - TCP connection re-established successfully
+2025-11-15 13:49:28,082 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 13:49:28,082 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 13:49:28,083 - INFO - Auto reconnection monitoring started
+2025-11-15 13:49:28,083 - INFO - Auto reconnection monitoring started
+2025-11-15 13:49:28,086 - INFO - Flask service thread started
+2025-11-15 13:49:28,087 - INFO - Using static resource directory: C:\Works\4RU 120KW\120KWCDUProject\4RU_120KW_Program\cdu120kw\static_resources
+2025-11-15 13:49:28,088 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 13:49:28,104 - INFO - Server listening.
+2025-11-15 13:50:46,174 - INFO - Received interrupt signal, clearing resources...
+2025-11-15 13:50:46,175 - INFO - Clean up resources
+2025-11-15 13:50:46,175 - INFO - Service termination
+2025-11-15 13:57:28,981 - INFO - 应用程序启动中...
+2025-11-15 13:57:28,982 - INFO - TCP connection re-established successfully
+2025-11-15 13:57:28,982 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 13:57:28,984 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 13:57:28,984 - INFO - Auto reconnection monitoring started
+2025-11-15 13:57:28,984 - INFO - Auto reconnection monitoring started
+2025-11-15 13:57:28,987 - INFO - Flask service thread started
+2025-11-15 13:57:28,987 - INFO - Using static resource directory: C:\Works\4RU 120KW\120KWCDUProject\4RU_120KW_Program\cdu120kw\static_resources
+2025-11-15 13:57:28,990 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 13:57:29,007 - INFO - Server listening.
+2025-11-15 13:57:40,949 - INFO - 收到中断信号，开始清理资源...
+2025-11-15 13:57:40,949 - INFO - 请等待清理完成，不要重复按 Ctrl+C
+2025-11-15 14:20:36,360 - INFO - 应用程序启动中...
+2025-11-15 14:20:36,362 - INFO - TCP connection re-established successfully
+2025-11-15 14:20:36,362 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:20:36,363 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:20:36,363 - INFO - Auto reconnection monitoring started
+2025-11-15 14:20:36,363 - INFO - Auto reconnection monitoring started
+2025-11-15 14:20:36,366 - INFO - Flask service thread started
+2025-11-15 14:20:36,369 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:20:36,386 - INFO - Server listening.
+2025-11-15 14:23:48,626 - INFO - 收到中断信号，开始清理资源...
+2025-11-15 14:23:48,626 - INFO - 请等待清理完成，不要重复按 Ctrl+C
+2025-11-15 14:23:49,537 - INFO - Application startup in progress...
+2025-11-15 14:23:49,540 - INFO - TCP connection re-established successfully
+2025-11-15 14:23:49,540 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:23:49,541 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:23:49,541 - INFO - Auto reconnection monitoring started
+2025-11-15 14:23:49,541 - INFO - Auto reconnection monitoring started
+2025-11-15 14:23:49,544 - INFO - Flask service thread started
+2025-11-15 14:23:49,547 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:23:49,560 - INFO - Server listening.
+2025-11-15 14:25:57,223 - CRITICAL - Failed to get redfish fans: get_all_fan_states() takes 1 positional argument but 2 were given
+2025-11-15 14:29:28,634 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:29:28,634 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:29:29,175 - INFO - Application startup in progress...
+2025-11-15 14:29:29,177 - INFO - TCP connection re-established successfully
+2025-11-15 14:29:29,178 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:29:29,179 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:29:29,179 - INFO - Auto reconnection monitoring started
+2025-11-15 14:29:29,179 - INFO - Auto reconnection monitoring started
+2025-11-15 14:29:29,183 - INFO - Flask service thread started
+2025-11-15 14:29:29,185 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:29:29,199 - INFO - Server listening.
+2025-11-15 14:29:41,559 - CRITICAL - Failed to get redfish fans: get_all_fan_states() takes 1 positional argument but 2 were given
+2025-11-15 14:30:29,617 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:30:29,618 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:36:21,047 - INFO - Application startup in progress...
+2025-11-15 14:36:21,048 - INFO - TCP connection re-established successfully
+2025-11-15 14:36:21,049 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:36:21,049 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:36:21,050 - INFO - Auto reconnection monitoring started
+2025-11-15 14:36:21,050 - INFO - Auto reconnection monitoring started
+2025-11-15 14:36:21,053 - INFO - Flask service thread started
+2025-11-15 14:36:21,055 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:36:21,061 - INFO - Server listening.
+2025-11-15 14:36:33,296 - INFO - Fan delayed shutdown timer scheduled (15s)
+2025-11-15 14:38:35,125 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:38:35,126 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:38:36,559 - INFO - Application startup in progress...
+2025-11-15 14:38:36,572 - INFO - TCP connection re-established successfully
+2025-11-15 14:38:36,572 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:38:36,573 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:38:36,574 - INFO - Auto reconnection monitoring started
+2025-11-15 14:38:36,574 - INFO - Auto reconnection monitoring started
+2025-11-15 14:38:36,580 - INFO - Flask service thread started
+2025-11-15 14:38:36,583 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:38:36,600 - INFO - Server listening.
+2025-11-15 14:38:44,732 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:38:44,732 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:49:03,159 - INFO - Application startup in progress...
+2025-11-15 14:49:03,171 - INFO - TCP connection re-established successfully
+2025-11-15 14:49:03,171 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:49:03,172 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:49:03,172 - INFO - Auto reconnection monitoring started
+2025-11-15 14:49:03,172 - INFO - Auto reconnection monitoring started
+2025-11-15 14:49:03,176 - INFO - Flask service thread started
+2025-11-15 14:49:03,178 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:49:03,195 - INFO - Server listening.
+2025-11-15 14:53:47,980 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:53:47,980 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:53:48,505 - INFO - Application startup in progress...
+2025-11-15 14:53:48,507 - INFO - TCP connection re-established successfully
+2025-11-15 14:53:48,508 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:53:48,508 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:53:48,509 - INFO - Auto reconnection monitoring started
+2025-11-15 14:53:48,509 - INFO - Auto reconnection monitoring started
+2025-11-15 14:53:48,512 - INFO - Flask service thread started
+2025-11-15 14:53:48,514 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:53:48,527 - INFO - Server listening.
+2025-11-15 14:54:29,961 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:54:29,962 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:54:30,490 - INFO - Application startup in progress...
+2025-11-15 14:54:30,495 - INFO - TCP connection re-established successfully
+2025-11-15 14:54:30,495 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:54:30,495 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:54:30,496 - INFO - Auto reconnection monitoring started
+2025-11-15 14:54:30,496 - INFO - Auto reconnection monitoring started
+2025-11-15 14:54:30,499 - INFO - Flask service thread started
+2025-11-15 14:54:30,502 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:54:30,512 - INFO - Server listening.
+2025-11-15 14:55:31,603 - INFO - Fan delayed shutdown timer scheduled (15s)
+2025-11-15 14:57:05,696 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:57:05,696 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:57:06,289 - INFO - Application startup in progress...
+2025-11-15 14:57:06,291 - INFO - TCP connection re-established successfully
+2025-11-15 14:57:06,291 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:57:06,292 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:57:06,292 - INFO - Auto reconnection monitoring started
+2025-11-15 14:57:06,292 - INFO - Auto reconnection monitoring started
+2025-11-15 14:57:06,296 - INFO - Flask service thread started
+2025-11-15 14:57:06,298 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:57:06,303 - INFO - Server listening.
+2025-11-15 14:58:51,895 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:58:51,895 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:58:52,464 - INFO - Application startup in progress...
+2025-11-15 14:58:52,465 - INFO - TCP connection re-established successfully
+2025-11-15 14:58:52,465 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:58:52,466 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:58:52,466 - INFO - Auto reconnection monitoring started
+2025-11-15 14:58:52,466 - INFO - Auto reconnection monitoring started
+2025-11-15 14:58:52,470 - INFO - Flask service thread started
+2025-11-15 14:58:52,472 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:58:52,477 - INFO - Server listening.
+2025-11-15 14:58:54,991 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:58:54,992 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C
+2025-11-15 14:59:37,993 - INFO - Application startup in progress...
+2025-11-15 14:59:37,995 - INFO - TCP connection re-established successfully
+2025-11-15 14:59:37,995 - WARNING - RTU connection lost, start reconnecting...
+2025-11-15 14:59:37,995 - WARNING - RTUHeartbeat lost, error: ConnectionError
+2025-11-15 14:59:37,996 - INFO - Auto reconnection monitoring started
+2025-11-15 14:59:37,996 - INFO - Auto reconnection monitoring started
+2025-11-15 14:59:38,000 - INFO - Flask service thread started
+2025-11-15 14:59:38,002 - INFO - Serving on http://0.0.0.0:5000
+2025-11-15 14:59:38,018 - INFO - Server listening.
+2025-11-15 14:59:47,574 - INFO - Fan delayed shutdown timer scheduled (15s)
+2025-11-15 14:59:58,060 - INFO - Received interrupt signal, start cleaning resources...
+2025-11-15 14:59:58,060 - INFO - Please wait for the cleaning to complete and do not press again Ctrl+C

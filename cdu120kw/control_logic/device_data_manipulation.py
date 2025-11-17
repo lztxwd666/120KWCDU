@@ -111,8 +111,16 @@ PUMP_SPEED_END = PUMP_SPEED_START + 32             # 结束地址：728（排他
 PUMP_STATUS_START = PUMP_SPEED_END                 # 起始地址：728
 PUMP_STATUS_END = PUMP_STATUS_START + 32           # 结束地址：760（排他性，实际范围728-759）
 
-# 水泵批量占空比写入寄存器：760（单个寄存器）
-PUMP_BATCH_DUTY_REGISTER = PUMP_STATUS_END        # 地址：760
+# 水泵电压读取寄存器范围：760-763（共4个寄存器）
+PUMP_VOLTAGE_START = PUMP_STATUS_END               # 起始地址：760
+PUMP_VOLTAGE_END = PUMP_VOLTAGE_START + 4         # 结束地址：764（排他性，实际范围760-763）
+
+# 水泵温度读取寄存器范围：764-767（共4个寄存器）
+PUMP_TEMPERATURE_START = PUMP_VOLTAGE_END           # 起始地址：764
+PUMP_TEMPERATURE_END = PUMP_TEMPERATURE_START + 4   # 结束地址：768（排他性，实际范围764-767）
+
+# 水泵批量占空比写入寄存器：799（单个寄存器）
+PUMP_BATCH_DUTY_REGISTER = 799        # 地址：799
 
 
 # 比例阀寄存器定义 - 基于排他性结束地址计算
@@ -177,9 +185,6 @@ FLOW_VALUE_END = FLOW_VALUE_START + 8              # 结束地址：1108（排�
 FLOW_STATUS_START = FLOW_VALUE_END                 # 起始地址：1108
 FLOW_STATUS_END = FLOW_STATUS_START + 8            # 结束地址：1116（排他性，实际范围1108-1115）
 
-
-# 扩展传感器寄存器定义 - 基于排他性结束地址计算
-
 # 制冷量读取寄存器范围：1116-1119（共4个寄存器）
 COOLING_CAPACITY_START = FLOW_STATUS_END           # 起始地址：1116
 COOLING_CAPACITY_END = COOLING_CAPACITY_START + 4  # 结束地址：1120（排他性，实际范围1116-1119）
@@ -192,13 +197,15 @@ PH_VALUE_END = PH_VALUE_START + 8                  # 结束地址：1128（排�
 PH_STATUS_START = PH_VALUE_END                     # 起始地址：1128
 PH_STATUS_END = PH_STATUS_START + 8                # 结束地址：1136（排他性，实际范围1128-1135）
 
-# 预留传感器数值读取寄存器范围：1136-1143（共8个寄存器）
-RESERVED_SENSOR_VALUE_START = PH_STATUS_END        # 起始地址：1136
-RESERVED_SENSOR_VALUE_END = RESERVED_SENSOR_VALUE_START + 8  # 结束地址：1144（排他性，实际范围1136-1143）
+# 扩展传感器寄存器定义 - 基于排他性结束地址计算
 
-# 预留传感器状态读取寄存器范围：1144-1151（共8个寄存器）
-RESERVED_SENSOR_STATUS_START = RESERVED_SENSOR_VALUE_END     # 起始地址：1144
-RESERVED_SENSOR_STATUS_END = RESERVED_SENSOR_STATUS_START + 8  # 结束地址：1152（排他性，实际范围1144-1151）
+# 环境传感器数值读取寄存器范围：1136-1143（共16个寄存器）
+ENVIRONMENT_VALUE_START = PH_STATUS_END        # 起始地址：1136
+ENVIRONMENT_VALUE_END = ENVIRONMENT_VALUE_START + 16  # 结束地址：1152（排他性，实际范围1136-1151）
+
+# 环境传感器状态读取寄存器范围：1152-1167（共16个寄存器）
+ENVIRONMENT_STATUS_START = ENVIRONMENT_VALUE_END     # 起始地址：1152
+ENVIRONMENT_STATUS_END = ENVIRONMENT_STATUS_START + 16  # 结束地址：1168（排他性，实际范围1144-1167）
 
 
 class ProcessedRegisterMap:
@@ -236,6 +243,8 @@ class ProcessedRegisterMap:
             (PUMP_CURRENT_START, PUMP_CURRENT_END),
             (PUMP_SPEED_START, PUMP_SPEED_END),
             (PUMP_STATUS_START, PUMP_STATUS_END),
+            (PUMP_VOLTAGE_START, PUMP_VOLTAGE_END),
+            (PUMP_TEMPERATURE_START, PUMP_TEMPERATURE_END),
 
             # 比例阀相关寄存器范围
             (PV_DUTY_READ_START, PV_DUTY_READ_END),
@@ -257,12 +266,12 @@ class ProcessedRegisterMap:
             (FLOW_VALUE_START, FLOW_VALUE_END),
             (FLOW_STATUS_START, FLOW_STATUS_END),
 
-            # 扩展传感器相关寄存器范围
+            # 环境传感器相关寄存器范围
             (COOLING_CAPACITY_START, COOLING_CAPACITY_END),
             (PH_VALUE_START, PH_VALUE_END),
             (PH_STATUS_START, PH_STATUS_END),
-            (RESERVED_SENSOR_VALUE_START, RESERVED_SENSOR_VALUE_END),
-            (RESERVED_SENSOR_STATUS_START, RESERVED_SENSOR_STATUS_END),
+            (ENVIRONMENT_VALUE_START, ENVIRONMENT_VALUE_END),
+            (ENVIRONMENT_STATUS_START, ENVIRONMENT_STATUS_END),
         ]
 
         # 使用统一方法初始化所有寄存器范围
@@ -587,6 +596,15 @@ def process_pump_state(
     speed_addr = pump_cfg.get("r_d_speed_address", {}).get("local")
     speed = registers.get(speed_addr, 0) if speed_addr is not None else 0
 
+    # 读取电压（U16）
+    voltage_addr = pump_cfg.get("r_d_voltage_address", {}).get("local")
+    voltage = registers.get(voltage_addr, 0) if voltage_addr is not None else 0
+
+    # 读取温度（U16）
+    temperature_addr = pump_cfg.get("r_d_temperature_address", {}).get("local")
+    temperature = registers.get(temperature_addr, 0) if temperature_addr is not None else 0
+
+
     # 状态判定逻辑
     # 状态定义：0=停止，1=运行正常，2=故障
     # 判定规则：
@@ -620,6 +638,8 @@ def process_pump_state(
     processed_reg_map.set_register(PUMP_CURRENT_START + pump_index, int(u16_current))
     processed_reg_map.set_register(PUMP_SPEED_START + pump_index, int(speed))
     processed_reg_map.set_register(PUMP_STATUS_START + pump_index, int(state))
+    processed_reg_map.set_register(PUMP_VOLTAGE_START + pump_index, int(voltage))
+    processed_reg_map.set_register(PUMP_TEMPERATURE_START + pump_index, int(temperature))
 
     return {
         "name": name,
@@ -628,6 +648,8 @@ def process_pump_state(
         "current": int(u16_current),
         "speed": int(speed),
         "state": int(state),
+        "voltage": int(voltage),
+        "temperature": int(temperature),
     }
 
 def process_proportional_valve_state(
@@ -658,30 +680,30 @@ def process_proportional_valve_state(
     voltage_addr = pv_cfg.get("r_d_voltage_address", {}).get("local")
     voltage = registers.get(voltage_addr, 0) if voltage_addr is not None else 0
 
-    # 状态判定（带 8s 故障延时）
+    # 状态判定（带 12s 故障延时）
     # 状态定义：0=待机/关闭，1=运行正常，2=故障
     # 参考判定（示例阈值，保持与现有逻辑风格一致）：
     # - voltage < 2663：若 duty 较高但电压过低，判为故障（延时确认）；
-    # - duty < 200 且 2663 <= voltage < 2700：待机；
-    # - duty >= 200 且 voltage >= 2663：正常；
+    # - duty < 2000 且 2663 <= voltage < 2700：待机；
+    # - duty >= 2000 且 voltage >= 2663：正常；
     # - 其它情况：待机。
     state = 0
     key = f"pv_{pv_index}"
     if voltage < 2663:
         # 电压明显偏低：若 duty 已经较高，持续低电压才判故障
-        if duty_cycle >= 200:
+        if duty_cycle >= 2000:
             if _fault_time["pv"].get(key, 0) == 0:
                 _fault_time["pv"][key] = now
-            elif now - _fault_time["pv"][key] >= 8:
+            elif now - _fault_time["pv"][key] >= 12:
                 state = 2
             else:
                 state = 0
         else:
             state = 0
-    elif duty_cycle < 200 and 2663 <= voltage < 2700:
+    elif duty_cycle < 2000 and 2663 <= voltage < 2700:
         state = 0
         _fault_time["pv"][key] = 0
-    elif duty_cycle >= 200 and voltage >= 2700:
+    elif duty_cycle >= 2000 and voltage >= 2700:
         state = 1
         _fault_time["pv"][key] = 0
     else:
@@ -899,7 +921,7 @@ def process_flow_state(sensor_cfg, registers, sensor_index, now=None):
     }
 
 # PH 传感器状态处理
-def process_ph_state(sensor_cfg: dict, registers: dict, ph_index: int, now: float = None):
+def process_ph_state(sensor_cfg: dict, registers: dict, sensor_index: int, now: float = None):
     """
     PH 传感器处理:
     - 数值（S16，按配置小数位缩放写入）-> PH_VALUE_START + idx
@@ -933,7 +955,7 @@ def process_ph_state(sensor_cfg: dict, registers: dict, ph_index: int, now: floa
     calc_val_int = int(round(calc_val * scale))
 
     # 状态判定（带 8s 延时）
-    key = f"PH_{ph_index}"
+    key = f"PH_{sensor_index}"
     state = 1
     if calc_val < min_v or calc_val > max_v:
         if _fault_time["sensor"].get(key, 0) == 0:
@@ -948,11 +970,68 @@ def process_ph_state(sensor_cfg: dict, registers: dict, ph_index: int, now: floa
 
     # 写入处理后寄存器
     u16_calc_val_int = to_u16(calc_val_int)
-    processed_reg_map.set_register(PH_VALUE_START + ph_index, u16_calc_val_int)
-    processed_reg_map.set_register(PH_STATUS_START + ph_index, state)
+    processed_reg_map.set_register(PH_VALUE_START + sensor_index, u16_calc_val_int)
+    processed_reg_map.set_register(PH_STATUS_START + sensor_index, state)
 
     return {
         "name": sensor_cfg.get("name", "PH"),
+        "value": u16_calc_val_int,
+        "state": state,
+    }
+
+# 环境传感器状态处理
+def process_environment_state(sensor_cfg, registers, sensor_index, now=None):
+    """
+    环境传感器处理:
+    - 数值区: ENVIRONMENT_VALUE_START + idx
+    - 状态区: ENVIRONMENT_STATUS_START + idx
+    状态: 0=传感器故障，1=正常，2=低于下限，3=高于上限
+    """
+    if now is None:
+        now = time.time()
+    raw_addr = sensor_cfg.get("r_d_pht_address", {}).get("local")
+    raw_val = registers.get(raw_addr, 0)
+
+    offset1 = float(sensor_cfg.get("offset1", 0))
+    offset2 = float(sensor_cfg.get("offset2", 0))
+    gain1 = float(sensor_cfg.get("gain1", 1))
+    gain2 = float(sensor_cfg.get("gain2", 1))
+    gain3 = float(sensor_cfg.get("gain3", 1))
+    decimals = int(sensor_cfg.get("r_d_pht_decimals", 1))
+    min_v = float(sensor_cfg.get("min_pht", -273))
+    max_v = float(sensor_cfg.get("max_pht", 999))
+
+    # 计算物理量
+    calc_val = (raw_val + offset1 + offset2) * gain1 * gain2 * gain3
+    calc_val_int = int(round(calc_val * (10 ** decimals)))
+
+    # 状态判定逻辑
+    key = f"PHT_{sensor_index}"
+    state = 1
+    if calc_val > 200 or calc_val < -100:
+        if _fault_time["sensor"].get(key, 0) == 0:
+            _fault_time["sensor"][key] = now
+        elif now - _fault_time["sensor"][key] >= 8:
+            state = 0
+    elif calc_val < min_v:
+        if _fault_time["sensor"].get(key, 0) == 0:
+            _fault_time["sensor"][key] = now
+        elif now - _fault_time["sensor"][key] >= 8:
+            state = 2
+    elif calc_val > max_v:
+        if _fault_time["sensor"].get(key, 0) == 0:
+            _fault_time["sensor"][key] = now
+        elif now - _fault_time["sensor"][key] >= 8:
+            state = 3
+    else:
+        state = 1
+        _fault_time["sensor"][key] = 0
+
+    u16_calc_val_int = to_u16(calc_val_int)
+    processed_reg_map.set_register(ENVIRONMENT_VALUE_START + sensor_index, u16_calc_val_int)
+    processed_reg_map.set_register(ENVIRONMENT_STATUS_START + sensor_index, state)
+
+    return {
         "value": u16_calc_val_int,
         "state": state,
     }
@@ -1104,6 +1183,7 @@ def get_all_sensor_states(reg_map) -> list:
     press_idx = 0
     flow_idx = 0
     ph_idx = 0
+    pht_idx = 0
 
     for item in sensors:
         cfg = item.get("config", {})
@@ -1119,6 +1199,9 @@ def get_all_sensor_states(reg_map) -> list:
         elif "r_d_ph_address" in cfg:
             results.append(process_ph_state(cfg, reg_map.registers, ph_idx, now))
             ph_idx += 1
+        elif "r_d_pht_address" in cfg:
+            results.append(process_environment_state(cfg, reg_map.registers, pht_idx, now))
+            pht_idx += 1
         else:
             # 未知类型，跳过
             continue

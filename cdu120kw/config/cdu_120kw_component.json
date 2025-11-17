@@ -69,6 +69,16 @@
           "remote": 0
         },
         "r_d_current_decimals": 3,
+        "r_d_voltage_address": {
+          "local": 2112,
+          "remote": 0
+        },
+        "r_d_voltage_decimals": 1,
+        "r_d_temperature_address": {
+          "local": 2113,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
         "enabled": true,
         "min_duty": 0,
         "max_duty": 100
@@ -93,6 +103,16 @@
           "remote": 0
         },
         "r_d_current_decimals": 3,
+        "r_d_voltage_address": {
+          "local": 2116,
+          "remote": 0
+        },
+        "r_d_voltage_decimals": 1,
+        "r_d_temperature_address": {
+          "local": 2117,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
         "enabled": true,
         "min_duty": 0,
         "max_duty": 100
@@ -181,6 +201,24 @@
         "name": "T4",
         "r_d_temperature_address": {
           "local": 3331,
+          "remote": 0
+        },
+        "r_d_temperature_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_temperature": 0,
+        "max_temperature": 60
+      }
+    },
+    {
+      "name": "T5",
+      "config": {
+        "name": "T5",
+        "r_d_temperature_address": {
+          "local": 3376,
           "remote": 0
         },
         "r_d_temperature_decimals": 1,
@@ -317,6 +355,132 @@
         "gain3": 1.0,
         "min_ph": 0,
         "max_ph": 14
+      }
+    },
+    {
+      "name": "PHT1",
+      "config": {
+        "name": "PHT1",
+        "r_d_pht_address": {
+          "local": 3344,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
+      }
+    },
+    {
+      "name": "PHT2",
+      "config": {
+        "name": "PHT2",
+        "r_d_pht_address": {
+          "local": 3345,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
+      }
+    },
+    {
+      "name": "PHT3",
+      "config": {
+        "name": "PHT3",
+        "r_d_pht_address": {
+          "local": 3346,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
+      }
+    },
+    {
+      "name": "PHT4",
+      "config": {
+        "name": "PHT4",
+        "r_d_pht_address": {
+          "local": 3347,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
+      }
+    },
+    {
+      "name": "PHT5",
+      "config": {
+        "name": "PHT5",
+        "r_d_pht_address": {
+          "local": 3348,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
+      }
+    },
+    {
+      "name": "PHT6",
+      "config": {
+        "name": "PHT6",
+        "r_d_pht_address": {
+          "local": 3349,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
+      }
+    },
+    {
+      "name": "PHT7",
+      "config": {
+        "name": "PHT7",
+        "r_d_pht_address": {
+          "local": 3350,
+          "remote": 0
+        },
+        "r_d_pht_decimals": 1,
+        "offset1": 0,
+        "offset2": 0,
+        "gain1": 1.0,
+        "gain2": 1.0,
+        "gain3": 1.0,
+        "min_pht": 0,
+        "max_pht": 60
       }
     }
   ]

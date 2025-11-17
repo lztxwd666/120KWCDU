@@ -30,11 +30,14 @@ class ModbusRTUConnectionManager(ModbusConnectionManagerBase):
         self.parity = "N"
         self.stopbits = 1
         self.timeout = 1.0
+        self.xonxoff = False
+        self.rtscts = False
+        self.dsrdtr = False
         self._has_logged_disconnect = False
         self._reconnect_attempts = 0
         self._last_connect_error = None
 
-    def configure(self, port, baudrate, bytesize, parity, stopbits, timeout):
+    def configure(self, port, baudrate, bytesize, parity, stopbits, timeout, xonxoff, rtscts, dsrdtr):
         """
         动态配置串口参数
         """
@@ -44,6 +47,10 @@ class ModbusRTUConnectionManager(ModbusConnectionManagerBase):
         self.parity = parity
         self.stopbits = stopbits
         self.timeout = timeout
+        self.xonxoff = xonxoff
+        self.rtscts = rtscts
+        self.dsrdtr = dsrdtr
+
 
     def start_rtuconnect(self):
         """
@@ -67,6 +74,9 @@ class ModbusRTUConnectionManager(ModbusConnectionManagerBase):
                     parity=self.parity,
                     stopbits=self.stopbits,
                     timeout=self.timeout,
+                    xonxoff=self.xonxoff,
+                    rtscts=self.rtscts,
+                    dsrdtr=self.dsrdtr,
                 )
                 if self.client.connect():
                     self.connected = True

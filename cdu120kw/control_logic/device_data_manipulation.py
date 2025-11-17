@@ -638,8 +638,8 @@ def process_pump_state(
     processed_reg_map.set_register(PUMP_CURRENT_START + pump_index, int(u16_current))
     processed_reg_map.set_register(PUMP_SPEED_START + pump_index, int(speed))
     processed_reg_map.set_register(PUMP_STATUS_START + pump_index, int(state))
-    processed_reg_map.set_register(PUMP_VOLTAGE_START + pump_index, int(voltage))
-    processed_reg_map.set_register(PUMP_TEMPERATURE_START + pump_index, int(temperature))
+    processed_reg_map.set_register(PUMP_VOLTAGE_START + pump_index, int(voltage * 100))
+    processed_reg_map.set_register(PUMP_TEMPERATURE_START + pump_index, int(temperature * 10))
 
     return {
         "name": name,

@@ -9,10 +9,7 @@
     "byte_size": 8,
     "parity": "N",
     "stop_bits": 1,
-    "timeout": 0.1,
-    "xonxoff": false,
-    "rtscts": false,
-    "dsrdtr": false
+    "timeout": 0.2
   },
   "modbus_hmi": {
     "rtu": {
@@ -21,10 +18,7 @@
       "byte_size": 8,
       "parity": "N",
       "stop_bits": 1,
-      "timeout": 0.1,
-      "xonxoff": false,
-      "rtscts": false,
-      "dsrdtr": false
+      "timeout": 0.2
     },
     "tcp": {
       "ip": "192.168.1.151",

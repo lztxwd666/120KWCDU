@@ -170,7 +170,7 @@ def _run_modbus_rtu_server():
     bytesize = _RTU_CFG.get("byte_size", 8)
     parity = _RTU_CFG.get("parity", "N")
     stopbits = _RTU_CFG.get("stop_bits", 1)
-    timeout = float(_RTU_CFG.get("timeout", 0.1))  # 建议 0.2~0.5
+    timeout = float(_RTU_CFG.get("timeout", 0.2))  # 建议 0.2~0.5
     # 额外 pyserial 参数（按需存在则传入）
     xonxoff = bool(_RTU_CFG.get("xonxoff", False))
     rtscts = bool(_RTU_CFG.get("rtscts", False))

@@ -1,12 +1,9 @@
 import json
-import logging
 from collections import OrderedDict
 
 from flask import Response
 
 from cdu120kw.control_logic.device_data_manipulation import get_all_fan_states, get_all_pump_states
-
-logger = logging.getLogger(__name__)
 
 def get_redfish_all_fans(mapping_task_manager, component_config_path="config/cdu_120kw_component.json"):
     """
@@ -101,7 +98,7 @@ def get_redfish_all_fans(mapping_task_manager, component_config_path="config/cdu
         return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json")
 
     except Exception as e:
-        logger.critical(f"Failed to get redfish fans: {str(e)}")
+        print(f"[Redfish] CRITICAL: Failed to get redfish fans: {str(e)}")
         result = OrderedDict([
             ("code", 1),
             ("message", f"InternalError: {str(e)}"),
@@ -199,7 +196,7 @@ def get_redfish_all_pumps(mapping_task_manager, component_config_path="config/cd
         return Response(json.dumps(result, ensure_ascii=False), mimetype="application/json")
 
     except Exception as e:
-        logger.critical(f"Failed to get redfish pumps: {str(e)}")
+        print(f"[Redfish] CRITICAL: Failed to get redfish pumps: {str(e)}")
         result = OrderedDict([
             ("code", 1),
             ("message", f"InternalError: {str(e)}"),

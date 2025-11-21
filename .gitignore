@@ -1,7 +1,6 @@
 # 忽略所有静态资源目录
 /media/
 /.venv
-/bin
 
 node_modules/
 dist/
@@ -29,4 +28,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-cdu120kw/config/ai˵��.txt
+cdu120kw/config/ai˵��.txt

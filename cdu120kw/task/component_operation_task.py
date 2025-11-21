@@ -1,5 +1,14 @@
+"""
+组件操作任务管理器
+- 支持批量写入PCBA寄存器（线圈/保持寄存器）
+- 支持TCP/RTU自动切换
+- 支持优先级插队写入
+- 支持最小/最大占空比自动夹取
+- 支持全局配置缓存（单路径只加载与预处理一次）
+"""
+
+
 import json
-import logging
 import os
 import threading
 import time
@@ -7,8 +16,6 @@ from typing import Dict, Tuple, Optional
 
 from cdu120kw.modbus_manager.batch_writer import ModbusBatchWriter
 from cdu120kw.task.task_queue import BasePollingTaskManager
-
-logger = logging.getLogger(__name__)
 
 # 全局配置缓存（单路径只加载与预处理一次）
 _CONFIG_FILE_CACHE: Dict[str, "ComponentTaskParamManager"] = {}
@@ -153,7 +160,6 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
         rtu_reconnect_mgr=None,
     ):
         super().__init__(pool_workers=pool_workers)
-        self.logger = logger
         self.tcp_manager = tcp_manager
         self.rtu_manager = rtu_manager
         self.tcp_writer = ModbusBatchWriter(self.tcp_manager)
@@ -178,7 +184,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
             mgr = ComponentTaskParamManager(config_path)
             _CONFIG_FILE_CACHE[config_path] = mgr
         self.param_mgr = mgr
-        self.logger.info("Loaded component operation task (from cache=%s)", config_path in _CONFIG_FILE_CACHE)
+        print(f"[ComponentOperationTask] INFO: Loaded component operation task")
 
     def update_mode(self):
         with self.lock:
@@ -198,7 +204,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
                 self.accept_new_task = False
                 self.pause()
             if self.current_mode != prev_mode:
-                self.logger.info("Switch hosted mode: %s -> %s", prev_mode, self.current_mode)
+                print(f"[ComponentOperationTask] INFO: Switch hosted mode: {prev_mode} -> {self.current_mode}")
 
     @staticmethod
     def _pick_first_writable(param: "ComponentTaskParam", value_dict: dict):
@@ -221,7 +227,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
         self.update_mode()
         with self.lock:
             if not self.accept_new_task:
-                self.logger.warning("Communication offline, reject new write task")
+                print("[ComponentOperationTask] WARNING: Communication offline, reject new write task")
                 return "Communication offline, reject new write task"
             if not self.param_mgr:
                 return "Param manager not initialized"
@@ -268,18 +274,12 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
             # 去重：相同地址与相同值则跳过
             last_key = (write_type, address)
             if self.last_write_values.get(last_key) == write_value:
-                self.logger.info(
-                    "Skip write: %s, type=%s, addr=%s, value=%s（与上次相同）",
-                    name, write_type, address, write_value
-                )
+                # print(f"[ComponentOperationTask] INFO: Skip write: {name}, type={write_type}, addr={address}, value={write_value}, (Same as last time)")
                 return "Skip write: value not changed"
             self.last_write_values[last_key] = write_value
 
             # # 提交写入任务日志
-            # self.logger.info(
-            #     "Submit write task: %s, type=%s, addr=%s, value=%s, priority=%s",
-            #     name, write_type, address, write_value, priority
-            # )
+            # print(f"[ComponentOperationTask] INFO: Submit write task: {name}, type={write_type}, addr={address}, value={write_value}, priority={priority}")
             self.task_queue.put_task(
                 func=self.execute_write,
                 args=(param, write_value, slave, address, write_type),
@@ -300,7 +300,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
                 manager = self.tcp_manager if self.current_mode == "tcp" else self.rtu_manager
                 reconnect_mgr = self.tcp_reconnect_mgr if self.current_mode == "tcp" else self.rtu_reconnect_mgr
                 if not writer:
-                    self.logger.warning("No Modbus connection available, skip write task")
+                    print("[ComponentOperationTask] WARNING: No Modbus connection available, skip write task")
                     return False
 
                 if write_type == "coil":
@@ -311,13 +311,10 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
 
                 # 检查写入结果，无错误则退出重试
                 if not err:
-                    # self.logger.info("Write success: %s, addr %s, value=%s", param.name, address, value)
+                    # print(f"[ComponentOperationTask] INFO: Write success: {param.name}, addr {address}, value={value}")
                     break
                 else:
-                    self.logger.warning(
-                        "Write %s failed: %s, addr %s, error: %s",
-                        write_type, param.name, address, err
-                    )
+                    print(f"[ComponentOperationTask] WARNING: Write {write_type} failed: {param.name}, addr {address}, error: {err}")
                     if manager and hasattr(manager, "connection_lock"):
                         with manager.connection_lock:
                             manager.connected = False
@@ -327,17 +324,14 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
                     retry += 1
                     time.sleep(1)
             else:
-                self.logger.error(
-                    "Write %s failed after 3 retries: %s, addr %s",
-                    write_type, param.name, address
-                )
+                print(f"[ComponentOperationTask] ERROR: Write {write_type} failed after 3 retries: {param.name}, addr {address}")
         finally:
             pass
 
     # 兼容旧读接口（若无映射管理器则直接返回None）
     def get_register_map(self):
         if not self.mapping_task_manager:
-            self.logger.warning("Mapping task manager not provided, read interface disabled")
+            print("[ComponentOperationTask] WARNING: Mapping task manager not provided, read interface disabled")
             return None
         return self.mapping_task_manager.get_register_map()
 
@@ -347,7 +341,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
             return None
         param = self.param_mgr.get_param(name) if self.param_mgr else None
         if not param:
-            self.logger.warning("Component not found: %s", name)
+            print(f"[ComponentOperationTask] WARNING: Component not found: {name}")
             return None
         address_key = None
         for k in param.config:
@@ -355,11 +349,11 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
                 address_key = k
                 break
         if not address_key:
-            self.logger.warning("No %s address found for: %s", key_prefix, name)
+            print(f"[ComponentOperationTask] WARNING: No {key_prefix} address found for: {name}")
             return None
         addr_info = param.get(address_key, {})
         if "local" not in addr_info:
-            self.logger.warning("%s not found for: %s", address_key, name)
+            print(f"[ComponentOperationTask] WARNING: {address_key} not found for: {name}")
             return None
         address = addr_info["local"]
         decimals_key = address_key.replace("address", decimals_key_suffix.lstrip("_"))
@@ -375,7 +369,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
             return None
         param = self.param_mgr.get_param(name) if self.param_mgr else None
         if not param:
-            self.logger.warning("Component not found: %s", name)
+            print(f"[ComponentOperationTask] WARNING: Component not found: {name}")
             return None
         address_key = None
         for k in param.config:
@@ -383,11 +377,11 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
                 address_key = k
                 break
         if not address_key:
-            self.logger.warning("No %s address found for: %s", key_prefix, name)
+            print(f"[ComponentOperationTask] WARNING: No {key_prefix} address found for: {name}")
             return None
         addr_info = param.get(address_key, {})
         if "local" not in addr_info:
-            self.logger.warning("%s not found for: %s", address_key, name)
+            print(f"[ComponentOperationTask] WARNING: {address_key} not found for: {name}")
             return None
         address = addr_info["local"]
         value = reg.coils.get(address)

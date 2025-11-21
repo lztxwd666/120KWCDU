@@ -2,7 +2,6 @@
 程序主控制器，负责Modbus连接管理、Flask服务启动与停止等
 """
 
-import logging
 import threading
 
 from waitress import serve
@@ -51,8 +50,6 @@ class AppController:
         self.shutdown_event = threading.Event()
         self.service_stopped = True
         self.thread_pool = ThreadPoolManager(max_workers=5)  # 创建线程池
-
-        self.logger = logging.getLogger(__name__)
 
         # 读取分组配置，设置TCP和RTU参数
         tcp_cfg = self.config.modbus_tcp
@@ -147,17 +144,23 @@ class AppController:
             self.tcp_reconnect_manager.start()
             self.rtu_reconnect_manager.start()
             start_modbus_hmi_server()
+
+            # 初始化自动控制逻辑
+            from cdu120kw.control_logic.auto_control import initialize_auto_control
+            initialize_auto_control()
+
             self.start_flask_server()
             self.service_stopped = False
         except Exception as e:
-            self.logger.error(f"Service startup error: {e}", exc_info=True)
+            print(f"[AppController] ERROR: Service startup error: {e}")
+
 
     def stop_service(self):
         """
         停止服务和自动重连
         """
         try:
-            self.logger.info("Service termination")
+            print("[AppController] INFO: Service termination")
             self.mapping_task_manager.shutdown()
             self.low_freq_task_manager.shutdown()
             self.component_task_manager.shutdown()
@@ -167,14 +170,14 @@ class AppController:
             modbusrtu_manager.disconnect()
             self.service_stopped = True
         except Exception as e:
-            self.logger.error(f"Stop service error: {e}", exc_info=True)
+            print(f"[AppController] ERROR: Stop service error: {e}")
 
     def start_flask_server(self):
         """
         启动Flask后端服务（后台线程）
         """
         if self.server_thread and self.server_thread.is_alive():
-            self.logger.warning("Flask service thread is still running, stop for now")
+            print("[AppController] WARNING: Flask service thread is still running, stop for now")
             self.stop_flask_server()
 
         try:
@@ -182,11 +185,9 @@ class AppController:
                 target=self.run_flask_server, daemon=True
             )
             self.server_thread.start()
-            self.logger.info("Flask service thread started")
+            print("[AppController] INFO: Flask service thread started")
         except Exception as e:
-            self.logger.error(
-                f"Failed to start Flask service thread: {e}", exc_info=True
-            )
+            print(f"[AppController] ERROR: Failed to start Flask service thread: {e}")
 
     def stop_flask_server(self):
         """
@@ -195,14 +196,12 @@ class AppController:
         if self.flask_server:
             try:
                 self.flask_server.shutdown()
-                self.logger.info("Flask service has requested shutdown")
+                print("[AppController] INFO: Flask service has requested shutdown")
             except Exception as e:
-                self.logger.warning(f"Flask shutdown exception: {e}")
+                print(f"[AppController] WARNING: Flask shutdown exception: {e}")
             finally:
                 self.flask_server = None
-        # self.logger.info(
-        #     "Forcefully exit the process to shut down the waitress service"
-        # )
+        # print("[AppController] INFO: Forcefully exit the process to shut down the waitress service")
         # os._exit(0)
 
     def run_flask_server(self):
@@ -220,10 +219,10 @@ class AppController:
                 threads=flask_cfg.get("threads", 4),
             )
         except Exception as e:
-            self.logger.error(f"Flask server exception: {e}", exc_info=True)
+            print(f"[AppController] ERROR: Flask server exception: {e}")
 
     def cleanup(self):
-        self.logger.info("Clean up resources")
+        print("[AppController] INFO: Clean up resources")
         self.stop_service()
         self.stop_flask_server()
 

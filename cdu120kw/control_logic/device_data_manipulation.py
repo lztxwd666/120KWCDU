@@ -3,7 +3,6 @@
 """
 
 import json
-import logging
 import os
 import threading
 import time
@@ -16,6 +15,10 @@ _sync_thread_lock = threading.Lock()
 # 风扇停机定时器
 _fan_shutdown_timer: Optional[threading.Timer] = None
 _fan_shutdown_timer_lock = threading.Lock()
+
+# 初始化时同步所有写入寄存器的值，为其增加标志和锁
+_first_sync_flag = False  # 第一次同步标志
+_first_sync_lock = threading.Lock()  # 第一次同步锁
 
 # 防止重入标志
 _we_guard = threading.local()
@@ -59,8 +62,13 @@ PUMP_BATCH_SWITCH_COIL = 129                       # 地址：129
 
 # 保持寄存器（Holding Registers）规划 - 基于排他性结束地址计算
 
-# 控制模式寄存器：399（单个寄存器）
-HOLDING_REGISTER_CONTROL_MODE = 399                # 地址：399
+# 自动控制模式的目标值寄存器：395、396、397（共3个寄存器）
+CONTROL_MODE_TARGET_FLOW_REGISTER = 395            # 自动控制模式的目标流量寄存器地址：395
+CONTROL_MODE_TARGET_TEMP_REGISTER = 396            # 自动控制模式的目标温度寄存器地址：396
+CONTROL_MODE_TARGET_PRESSUREDIFF_REGISTER = 397    # 自动控制模式的目标压差寄存器地址：397
+
+# 控制模式寄存器：399（值1/2/3/4，代表四种模式）
+CONTROL_MODE = 399                # 地址：399
 
 
 # 风扇寄存器定义 - 基于排他性结束地址计算
@@ -216,13 +224,19 @@ class ProcessedRegisterMap:
     def __init__(self):
         """
         初始化寄存器映射表
-        线圈范围：0-399，保持寄存器范围：0-65535
+        线圈范围：0-379，保持寄存器范围：0-65535
         """
-        # 线圈初始化：使用字典推导式预初始化 0-399
-        self.coils = {c: 0 for c in range(0, 400)}
+        # 线圈初始化：使用字典推导式预初始化 0-379
+        self.coils = {c: 0 for c in range(0, 379)}
 
         # 保持寄存器初始化：使用字典推导式预初始化 0-65535，避免动态添加地址导致KeyError
         self.registers = {r: 0 for r in range(0, 65536)}
+
+        # 设置目标值寄存器初始值
+        self.registers[CONTROL_MODE] = 1                             # 控制模式初始值 1 (手动模式)
+        self.registers[CONTROL_MODE_TARGET_FLOW_REGISTER] = 500      # 目标流量初始值 500 (50.0 L/min)
+        self.registers[CONTROL_MODE_TARGET_TEMP_REGISTER] = 250      # 目标温度初始值 250 (25.0°C)
+        self.registers[CONTROL_MODE_TARGET_PRESSUREDIFF_REGISTER] = 50  # 目标压差初始值 50 (0.5 MPa)
 
         # 回调函数列表初始化
         self._write_coil_callbacks = []
@@ -308,8 +322,14 @@ class ProcessedRegisterMap:
             (COIL_WRITE_ENABLE, COIL_WRITE_ENABLE + 1),
         ]
 
-        # 寄存器写入范围：只允许在这些范围内的寄存器写入操作触发回调
+        # 保持寄存器写入范围：只允许在这些范围内的寄存器写入操作触发回调
         self._register_write_ranges = [
+            # 控制模式相关寄存器
+            (CONTROL_MODE, CONTROL_MODE + 1),
+            (CONTROL_MODE_TARGET_FLOW_REGISTER, CONTROL_MODE_TARGET_FLOW_REGISTER + 1),
+            (CONTROL_MODE_TARGET_TEMP_REGISTER, CONTROL_MODE_TARGET_TEMP_REGISTER + 1),
+            (CONTROL_MODE_TARGET_PRESSUREDIFF_REGISTER, CONTROL_MODE_TARGET_PRESSUREDIFF_REGISTER + 1),
+
             # 风扇、水泵、比例阀占空比写入预留范围
             (FAN_DUTY_WRITE_START, FAN_DUTY_WRITE_END),
             (PUMP_DUTY_WRITE_START, PUMP_DUTY_WRITE_END),
@@ -334,14 +354,14 @@ class ProcessedRegisterMap:
         """
         return any(start <= address < end for start, end in ranges)
 
-    def set_coil(self, address: int, value: int, force=False):
+    def set_coil(self, address: int, value: int, force=False, trigger_callback=True):
         """
         设置线圈值，如果地址在写入范围内且存在回调函数，则触发回调
-
         Args:
             address: 线圈地址
             value: 要设置的值（0或1）
             force: 是否强制设置，忽略写入范围检查（默认为False）
+            trigger_callback: 是否触发回调（默认为True）
         """
         # 检查地址是否在有效范围内
         if address not in self.coils:
@@ -351,7 +371,7 @@ class ProcessedRegisterMap:
         self.coils[address] = 1 if value else 0
 
         # 如果没有回调函数或地址不在写入范围内，直接返回
-        if not self._write_coil_callbacks or (not force and not self._in_ranges(address, self._coil_write_ranges)):
+        if not trigger_callback or not self._write_coil_callbacks or (not force and not self._in_ranges(address, self._coil_write_ranges)):
             return
 
         # 获取设置后的值并触发所有回调函数
@@ -359,13 +379,13 @@ class ProcessedRegisterMap:
         for cb in self._write_coil_callbacks:
             cb(address, val)
 
-    def set_register(self, address: int, value: int):
+    def set_register(self, address: int, value: int, trigger_callback=True):
         """
         设置寄存器值，如果地址在写入范围内且存在回调函数，则触发回调
-
         Args:
             address: 寄存器地址
             value: 要设置的值
+            trigger_callback: 是否触发回调（默认为True）
         """
         # 检查地址是否在有效范围内
         if address not in self.registers:
@@ -375,7 +395,7 @@ class ProcessedRegisterMap:
         self.registers[address] = int(value)
 
         # 如果没有回调函数或地址不在写入范围内，直接返回
-        if not self._write_register_callbacks or not self._in_ranges(address, self._register_write_ranges):
+        if not trigger_callback or not self._write_register_callbacks or not self._in_ranges(address, self._register_write_ranges):
             return
 
         # 获取设置后的值并触发所有回调函数
@@ -683,13 +703,13 @@ def process_proportional_valve_state(
     # 状态判定（带 12s 故障延时）
     # 状态定义：0=待机/关闭，1=运行正常，2=故障
     # 参考判定（示例阈值，保持与现有逻辑风格一致）：
-    # - voltage < 2663：若 duty 较高但电压过低，判为故障（延时确认）；
-    # - duty < 2000 且 2663 <= voltage < 2700：待机；
-    # - duty >= 2000 且 voltage >= 2663：正常；
+    # - voltage < 1990：若 duty 较高但电压过低，判为故障（延时确认）；
+    # - duty < 2000 且 1990 <= voltage < 2050：待机；
+    # - duty >= 2000 且 voltage >= 1990：正常；
     # - 其它情况：待机。
     state = 0
     key = f"pv_{pv_index}"
-    if voltage < 2663:
+    if voltage < 1990:
         # 电压明显偏低：若 duty 已经较高，持续低电压才判故障
         if duty_cycle >= 2000:
             if _fault_time["pv"].get(key, 0) == 0:
@@ -700,10 +720,10 @@ def process_proportional_valve_state(
                 state = 0
         else:
             state = 0
-    elif duty_cycle < 2000 and 2663 <= voltage < 2700:
+    elif duty_cycle < 2000 and 1990 <= voltage < 2050:
         state = 0
         _fault_time["pv"][key] = 0
-    elif duty_cycle >= 2000 and voltage >= 2700:
+    elif duty_cycle >= 2000 and voltage >= 2050:
         state = 1
         _fault_time["pv"][key] = 0
     else:
@@ -1050,8 +1070,7 @@ def get_temperature_diff(reg_map=None):
     diff_val = int(round((t4 - t1) * 1000))
     u16_diff_val = to_u16(diff_val)
     reg.set_register(TEMP_DIFF_START + 0, u16_diff_val)
-    # logger = logging.getLogger("diff_calc")
-    # logger.info(f"T1={t1:.3f}, T4={t4:.3f}, 温差寄存器[{TEMP_DIFF_START}]={reg.get_register(TEMP_DIFF_START + 0)}")
+    # print(f"[ControlLogic] INFO: T1={t1:.3f}, T4={t4:.3f}, 温差寄存器[{TEMP_DIFF_START}]={reg.get_register(TEMP_DIFF_START + 0)}")
     return u16_diff_val
 
 # 压差计算
@@ -1068,8 +1087,7 @@ def get_pressure_diff(reg_map=None):
     diff_val = int(round((p4 - p3) * 1000))
     u16_diff_val = to_u16(diff_val)
     reg.set_register(PRESS_DIFF_START + 0, u16_diff_val)
-    # logger = logging.getLogger("diff_calc")
-    # logger.info(f"P3={p3:.3f}, P4={p4:.3f}, 压差寄存器[{PRESS_DIFF_START}]={reg.get_register(PRESS_DIFF_START + 0)}")
+    # print(f"[ControlLogic] INFO: P3={p3:.3f}, P4={p4:.3f}, 压差寄存器[{PRESS_DIFF_START}]={reg.get_register(PRESS_DIFF_START + 0)}")
     return u16_diff_val
 
 # 制冷量计算
@@ -1137,7 +1155,7 @@ def get_cooling_capacity(reg_map=None):
     # if scaled < 0:
     #     scaled = 0
 
-    # print(f"calc: F2={f2_val:.3f} L/min, T3={t3:.3f} °C, T4={t4:.3f} °C, ΔT={delta_t:.3f} °C, cap_val={cap_val:.3f} kW")
+    # print(f"[ControlLogic] INFO: calc: F2={f2_val:.3f} L/min, T3={t3:.3f} °C, T4={t4:.3f} °C, ΔT={delta_t:.3f} °C, cap_val={cap_val:.3f} kW")
 
     # 物理量缩放 *1000 并四舍五入
     scaled = int(round(cap_val * 10))
@@ -1208,28 +1226,89 @@ def get_all_sensor_states(reg_map) -> list:
 
     return results
 
+# 第一次同步时，将写入寄存器的值也同步，避免程序启动后写入寄存器的值和实际值不匹配
+def _sync_read_to_write_registers_once():
+    """
+    第一次同步时，将读取寄存器的值同步到对应的写入寄存器
+    只执行一次，用于解决程序启动时显示状态不一致的问题
+    """
+    global _first_sync_flag
+
+    with _first_sync_lock:
+        if _first_sync_flag:
+            return  # 已经执行过第一次同步，直接返回
+        _first_sync_flag = True
+
+    # print("[ControlLogic] INFO: First sync - copying read registers to write registers")
+
+    try:
+        # 同步水泵占空比：读取寄存器600-631 -> 写入寄存器632-663
+        pump_count = len(CONFIG_CACHE.get("pumps", []))
+        for i in range(pump_count):
+            read_addr = PUMP_DUTY_READ_START + i
+            write_addr = PUMP_DUTY_WRITE_START + i
+            read_value = processed_reg_map.get_register(read_addr)
+            # 将读取寄存器的值同步到写入寄存器
+            processed_reg_map.set_register(write_addr, read_value, trigger_callback=False)
+            # print(f"[ControlLogic] DEBUG: Sync pump duty - pump_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
+
+        # 同步比例阀占空比：读取寄存器800-807 -> 写入寄存器808-815
+        pv_count = len(CONFIG_CACHE.get("proportional_valve", []))
+        for i in range(pv_count):
+            read_addr = PV_DUTY_READ_START + i
+            write_addr = PV_DUTY_WRITE_START + i
+            read_value = processed_reg_map.get_register(read_addr)
+            processed_reg_map.set_register(write_addr, read_value, trigger_callback=False)
+            # print(f"[ControlLogic] DEBUG: Sync PV duty - pv_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
+
+        # 同步风扇占空比：读取寄存器400-431 -> 写入寄存器432-463
+        fan_count = len(CONFIG_CACHE.get("fans", []))
+        for i in range(fan_count):
+            read_addr = FAN_DUTY_READ_START + i
+            write_addr = FAN_DUTY_WRITE_START + i
+            read_value = processed_reg_map.get_register(read_addr)
+            processed_reg_map.set_register(write_addr, read_value, trigger_callback=False)
+            # print(f"[ControlLogic] DEBUG: Sync fan duty - fan_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
+
+        # 同步风扇开关：读取线圈1-31 -> 写入线圈33-63
+        for i in range(fan_count):
+            read_addr = COIL_FAN_SWITCH_READ_START + i
+            write_addr = COIL_FAN_SWITCH_WRITE_START + i
+            read_value = processed_reg_map.get_coil(read_addr)
+            processed_reg_map.set_coil(write_addr, read_value, trigger_callback=False)
+            # print(f"[ControlLogic] DEBUG: Sync fan switch - fan_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
+
+        # 同步水泵开关：读取线圈65-95 -> 写入线圈97-127
+        for i in range(pump_count):
+            read_addr = COIL_PUMP_SWITCH_READ_START + i
+            write_addr = COIL_PUMP_SWITCH_WRITE_START + i
+            read_value = processed_reg_map.get_coil(read_addr)
+            processed_reg_map.set_coil(write_addr, read_value, trigger_callback=False)
+            # print(f"[ControlLogic] DEBUG: Sync pump switch - pump_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
+
+        # print("[ControlLogic] INFO: First sync completed - all read to write registers synchronized")
+
+    except Exception as e:
+        print(f"[ControlLogic] ERROR: First sync failed: {e}")
+
 # 处理后寄存器同步线程启动标志与锁
 def start_processed_register_sync(get_register_map_func, interval=0.15):
     """
     启动处理后寄存器同步线程，防止多次启动
     """
     global _sync_thread_started
-    logger = logging.getLogger("processed_register_sync")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False  # 防止重复向上冒泡
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
 
     with _sync_thread_lock:
         if _sync_thread_started:
-            logger.warning("processed_register_sync thread started skip duplicate starts")
+            print("[ControlLogic] WARNING: processed_register_sync thread started skip duplicate starts")
             return
         _sync_thread_started = True
 
     def sync_loop():
+        # 第一次同步标志，确保只执行一次
+        first_run = True
+        data_ready_check_count = 0
+
         while True:
             reg_map = get_register_map_func()
             get_all_fan_states(reg_map)
@@ -1239,6 +1318,25 @@ def start_processed_register_sync(get_register_map_func, interval=0.15):
             get_pressure_diff(processed_reg_map)
             get_temperature_diff(processed_reg_map)
             get_cooling_capacity(processed_reg_map)
+
+            # 第一次循环时执行读取寄存器到写入寄存器的同步，并且检查数据有效性
+            if first_run:
+                data_ready_check_count += 1
+
+                # 检查是否有实际设备数据（非0值）
+                has_actual_data = False
+                # 简单检查几个关键设备
+                if processed_reg_map.get_register(PUMP_DUTY_READ_START) != 0:
+                    has_actual_data = True
+                elif processed_reg_map.get_register(FAN_DUTY_READ_START) != 0:
+                    has_actual_data = True
+                elif processed_reg_map.get_register(PV_DUTY_READ_START) != 0:
+                    has_actual_data = True
+
+                if has_actual_data or data_ready_check_count >= 10:
+                    _sync_read_to_write_registers_once()
+                    first_run = False
+
             time.sleep(interval)
     t = threading.Thread(target=sync_loop, daemon=True)
     t.start()
@@ -1247,30 +1345,24 @@ def start_processed_register_sync(get_register_map_func, interval=0.15):
 def apply_write_enable_effect(enable: int):
     """
     纯业务逻辑函数：根据写使能变化执行设备动作
-    不写入 COIL_WRITE_ENABLE，不触发回调，避免二次递归。
-    仅由 hmi_write_trigger 在寄存器0变化时调用
-    写使能状态变化业务效果：
-      enable=1:
-        - 若存在风扇延迟关停定时器 -> 取消并立即启动所有风扇（记录已取消）
-        - 若不存在定时器 -> 仅记录“无待取消定时器”，仍启动所有风扇
-      enable=0:
-        - 立即停止水泵与比例阀（占空比置 0）
-        - 若无风扇延迟关停定时器 -> 创建新的定时器
-        - 若已有（极端情况下重复置 0 并并发触发） -> 取消旧的并替换（记录 replaced）
-
+    修改后的逻辑：
+    - 如果写入使能写0，不管什么模式，都立即关停水泵和比例阀，风扇延迟关闭，同时立即停止自动控制线程
+    - 如果切换到手动模式，只停止自动控制线程，保持当前设备状态
     """
-    logger = logging.getLogger("write_enable_effect")
     global _fan_shutdown_timer
 
     # 保存上一次的状态，防止重复执行
     prev = getattr(apply_write_enable_effect, "last", None)
     if prev == enable:
-        logger.debug("Write enable unchanged: %s", enable)
+        print(f"[ControlLogic] INFO: Write enable unchanged: {enable}")
         return
 
     fans = CONFIG_CACHE.get("fans", [])
     pumps = CONFIG_CACHE.get("pumps", [])
     pvs = CONFIG_CACHE.get("proportional_valve", [])
+
+    # 获取当前控制模式
+    control_mode = processed_reg_map.get_register(CONTROL_MODE)
 
     # 记录是否存在待执行关停定时器
     had_pending_timer = False
@@ -1285,18 +1377,22 @@ def apply_write_enable_effect(enable: int):
                     _fan_shutdown_timer.cancel()
                 finally:
                     _fan_shutdown_timer = None
-        # if had_pending_timer:
-        #     logger.warning("Write enable=1: start all fans immediately, cancel pending shutdown")
-        # else:
-        #     logger.warning("Write enable=1: start all fans immediately, no pending shutdown to cancel")
 
         # 启动全部风扇（force=True 跳过写使能判定）
         for i in range(len(fans)):
             write_fan_switch(i, 1, force=True)
 
+        print(f"[ControlLogic] INFO: Write enable=1 - starting all fans, control_mode={control_mode}")
+
     else:
-        # 停泵与比例阀占空比置 0（force=True）
-        # logger.warning("Write enable=0: immediate stop pumps & PVs, schedule fan delayed stop")
+        # 写入使能为0：立即停止水泵与比例阀（占空比置 0），风扇延迟关闭
+        print(f"[ControlLogic] INFO: Write enable=0 - immediate stop pumps & PVs, schedule fan delayed stop, control_mode={control_mode}")
+
+        # 立即停止自动控制线程
+        from cdu120kw.control_logic.auto_control import auto_control_manager
+        auto_control_manager.stop_auto_control()
+
+        # 停止水泵和比例阀
         for i in range(len(pumps)):
             write_pump_duty(i, 0, force=True)
         for i in range(len(pvs)):
@@ -1304,13 +1400,12 @@ def apply_write_enable_effect(enable: int):
 
         # 创建/替换风扇延迟关停定时器
         def delayed_shutdown():
-            # logger.warning("Delayed fan shutdown triggered")
+            print("[ControlLogic] INFO: Delayed fan shutdown triggered")
             for idx in range(len(fans)):
                 write_fan_switch(idx, 0, force=True)
 
         with _fan_shutdown_timer_lock:
             if _fan_shutdown_timer is not None:
-                # 理论上不会出现 enable 重复=0 触发；并发保护下仍做替换处理
                 try:
                     _fan_shutdown_timer.cancel()
                 finally:
@@ -1318,13 +1413,7 @@ def apply_write_enable_effect(enable: int):
             _fan_shutdown_timer = threading.Timer(15.0, delayed_shutdown)
             _fan_shutdown_timer.start()
 
-        if replaced_timer:
-            logger.info("Fan delayed shutdown timer replaced (previous pending canceled)")
-        else:
-            logger.info("Fan delayed shutdown timer scheduled (15s)")
-
     apply_write_enable_effect.last = enable
-    # logger.info("Write enable effect executed: %s -> %s", prev, enable)
 
 # 风扇开关写入函数
 def write_fan_switch(fan_index: int, switch_on: int, slave: int = 1, priority: int = 0, force: bool = False):
@@ -1339,28 +1428,26 @@ def write_fan_switch(fan_index: int, switch_on: int, slave: int = 1, priority: i
     from cdu120kw.service_function.controller_app import app_controller
     component_task_mgr = app_controller.component_task_manager
 
-    logger = logging.getLogger("device_data_manipulation")
-
     # 步骤1：判断写入使能，延迟关停风扇时允许强制写入
     if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
-        logger.warning("Fan switch write denied: write enable=0")
+        print("[ControlLogic] WARNING: Fan switch write denied: write enable=0")
         return False
 
     # # 步骤2：写入本地寄存器
     # coil_addr = COIL_FAN_SWITCH_WRITE_START + fan_index
     # processed_reg_map.set_coil(coil_addr, switch_on)
-    # logger.info(f"Local fan switch written: addr={coil_addr}, value={switch_on}")
+    # print(f"[ControlLogic] INFO: Local fan switch written: addr={coil_addr}, value={switch_on}")
 
     # 步骤3：查找风扇配置
     fan_list = CONFIG_CACHE.get("fans", [])
     if fan_index >= len(fan_list):
-        logger.error(f"Fan index {fan_index} out of range")
+        print(f"[ControlLogic] WARNING: Fan index {fan_index} out of range")
         return False
     fan_name = fan_list[fan_index]["name"]
 
     param = component_task_mgr.param_mgr.get_param(fan_name)
     if not param:
-        logger.error(f"Fan config not found: {fan_name}")
+        print(f"[ControlLogic] WARNING: Fan config not found: {fan_name}")
         return False
 
     field = None
@@ -1369,7 +1456,7 @@ def write_fan_switch(fan_index: int, switch_on: int, slave: int = 1, priority: i
             field = k
             break
     if not field:
-        logger.error(f"No writable coil field for fan: {fan_name}")
+        print(f"[ControlLogic] WARNING: No writable coil field for fan: {fan_name}")
         return False
 
     # 步骤4：写入PCBA
@@ -1379,7 +1466,7 @@ def write_fan_switch(fan_index: int, switch_on: int, slave: int = 1, priority: i
         slave=slave,
         priority=priority
     )
-    # logger.info(f"Fan switch submit (force={force}): {fan_name}={switch_on}, result={result}")
+    # print(f"[ControlLogic] INFO: Fan switch submit (force={force}): {fan_name}={switch_on}, result={result}")
     return result
 
 # 水泵占空比写入函数
@@ -1394,29 +1481,26 @@ def write_pump_duty(pump_index: int, duty: int, slave: int = 1, priority: int = 
     from cdu120kw.service_function.controller_app import app_controller
     component_task_mgr = app_controller.component_task_manager
 
-    import logging
-    logger = logging.getLogger("device_data_manipulation")
-
     # 步骤1：判断写入使能， 延迟关停水泵时允许强制写入
     if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
-        logger.warning("Pump duty write denied: write enable=0")
+        print("[ControlLogic] WARNING: Pump duty write denied: write enable=0")
         return False
 
     # # 步骤2：写入本地寄存器
     # reg_addr = PUMP_DUTY_WRITE_START + pump_index
     # processed_reg_map.set_register(reg_addr, duty)
-    # logger.info(f"Local pump duty written: addr={reg_addr}, value={duty}")
+    # print(f"[ControlLogic] INFO: Local pump duty written: addr={reg_addr}, value={duty}")
 
     # 步骤3：查找水泵配置
     pump_list = CONFIG_CACHE.get("pumps", [])
     if pump_index >= len(pump_list):
-        logger.error(f"Pump index {pump_index} out of range")
+        print(f"[ControlLogic] WARNING: Pump index {pump_index} out of range")
         return False
     pump_name = pump_list[pump_index]["name"]
 
     param = component_task_mgr.param_mgr.get_param(pump_name)
     if not param:
-        logger.error(f"Pump config not found: {pump_name}")
+        print(f"[ControlLogic] WARNING: Pump config not found: {pump_name}")
         return False
 
     # 找到可写保持寄存器字段
@@ -1426,7 +1510,7 @@ def write_pump_duty(pump_index: int, duty: int, slave: int = 1, priority: int = 
             field = k
             break
     if not field:
-        logger.error(f"No writable register field for pump: {pump_name}")
+        print(f"[ControlLogic] WARNING: No writable register field for pump: {pump_name}")
         return False
 
     # 步骤4：写入PCBA
@@ -1436,7 +1520,7 @@ def write_pump_duty(pump_index: int, duty: int, slave: int = 1, priority: int = 
         slave=slave,
         priority=priority
     )
-    # logger.info(f"Pump duty submit (force={force}): {pump_name}={duty}, result={result}")
+    # print(f"Pump duty submit (force={force}): {pump_name}={duty}, result={result}")
     return result
 
 # 比例阀占空比写入函数
@@ -1452,29 +1536,26 @@ def write_pv_duty(pv_index: int, duty: int, slave: int = 1, priority: int = 0, f
     from cdu120kw.service_function.controller_app import app_controller
     component_task_mgr = app_controller.component_task_manager
 
-    import logging
-    logger = logging.getLogger("device_data_manipulation")
-
     # 步骤1：判断写入使能， 延迟关停比例阀时允许强制写入
     if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
-        logger.warning("PV duty write denied: write enable=0")
+        print("[ControlLogic] WARNING: PV duty write denied: write enable=0")
         return False
 
     # # 步骤2：写入本地寄存器
     # reg_addr = PV_DUTY_WRITE_START + pv_index
     # processed_reg_map.set_register(reg_addr, duty)
-    # logger.info(f"Local proportional valve duty written: addr={reg_addr}, value={duty}")
+    # print(f"Local proportional valve duty written: addr={reg_addr}, value={duty}")
 
     # 步骤3：查找比例阀配置
     pv_list = CONFIG_CACHE.get("proportional_valve", [])
     if pv_index >= len(pv_list):
-        logger.error(f"PV index {pv_index} out of range")
+        print(f"[ControlLogic] WARNING: PV index {pv_index} out of range")
         return False
     pv_name = pv_list[pv_index]["name"]
 
     param = component_task_mgr.param_mgr.get_param(pv_name)
     if not param:
-        logger.error(f"PV config not found: {pv_name}")
+        print(f"[ControlLogic] WARNING: PV config not found: {pv_name}")
         return False
 
     field = None
@@ -1483,7 +1564,7 @@ def write_pv_duty(pv_index: int, duty: int, slave: int = 1, priority: int = 0, f
             field = k
             break
     if not field:
-        logger.error(f"No writable register field for PV: {pv_name}")
+        print(f"[ControlLogic] WARNING: No writable register field for PV: {pv_name}")
         return False
 
     # 步骤4：写入PCBA
@@ -1493,47 +1574,49 @@ def write_pv_duty(pv_index: int, duty: int, slave: int = 1, priority: int = 0, f
         slave=slave,
         priority=priority
     )
-    # logger.info(f"PV duty submit (force={force}): {pv_name}={duty}, result={result}")
+    # print(f"[ControlLogic] INFO: PV duty submit (force={force}): {pv_name}={duty}, result={result}")
     return result
 
 # 水泵批量占空比写入函数
 def batch_write_pump_duty(duty: int, slave: int = 1, priority: int = 0, force: bool = False):
     """
     水泵批量占空比写入函数
-    当HMI写入水泵批量占空比寄存器（760）时触发，为所有水泵设置相同的占空比
-    参数:
-        duty: 占空比值，范围0-10000（对应0.00%-100.00%，与单个水泵占空比寄存器格式一致）
-        force: 是否强制写入，忽略写入使能检查，默认False（一般由HMI触发时不应强制）
-    返回:
-        bool: 是否成功提交操作（注意：实际成功取决于PCBA响应，这里仅表示操作已提交）
+    通过设置所有水泵的单个写入寄存器来触发回调，实现批量写入
     """
-    logger = logging.getLogger("device_data_manipulation")
-
-    # 检查写入使能状态（除非强制写入）
-    if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
-        logger.warning("Pump batch duty write denied: write enable=0")
+    # 重入保护
+    if getattr(batch_write_pump_duty, '_executing', False):
+        print("[ControlLogic] WARNING: Batch write reentrancy detected")
         return False
 
-    # 获取水泵配置列表
-    pump_list = CONFIG_CACHE.get("pumps", [])
-    if not pump_list:
-        logger.warning("No pumps configured for batch duty write")
-        return False
+    batch_write_pump_duty._executing = True
 
-    # 遍历所有水泵，逐个写入占空比
-    success_count = 0
-    for pump_index in range(len(pump_list)):
-        # 调用单个水泵占空比写入函数
-        success = write_pump_duty(pump_index, duty, slave, priority, force)
-        if success:
-            success_count += 1
-        else:
-            logger.error("Failed to write batch duty for pump index %s", pump_index)
-            # 注意：即使某个水泵失败，也继续处理其他水泵
+    try:
+        # 检查写入使能
+        if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
+            print("[ControlLogic] WARNING: Pump batch duty write denied: write enable=0")
+            return False
 
-    # logger.info("Pump batch duty write completed: %s/%s pumps, duty=%s",
-    #             success_count, len(pump_list), duty)
-    return success_count > 0  # 只要有一个成功就返回True
+        # 获取水泵列表
+        pump_list = CONFIG_CACHE.get("pumps", [])
+        if not pump_list:
+            print("[ControlLogic] INFO: No pumps configured for batch duty write")
+            return False
+
+        # 批量设置所有水泵的写入寄存器
+        # print(f"[ControlLogic] INFO: Starting batch duty write for {len(pump_list)} pumps, duty={duty}")
+
+        for pump_index in range(len(pump_list)):
+            write_addr = PUMP_DUTY_WRITE_START + pump_index
+            processed_reg_map.set_register(write_addr, duty)
+
+        # print(f"[ControlLogic] INFO: Batch duty write completed - {len(pump_list)} registers updated")
+        return True
+
+    finally:
+        batch_write_pump_duty._executing = False
+
+# 初始化重入保护标志
+batch_write_pump_duty._executing = False
 
 # HMI写入触发回调函数
 def hmi_write_trigger(address: int, value: int):
@@ -1541,13 +1624,13 @@ def hmi_write_trigger(address: int, value: int):
     HMI写入触发回调函数
     处理所有HMI写入操作，包括新增的水泵批量控制
     """
-    logger = logging.getLogger("hmi_write")
+
     write_enable = processed_reg_map.get_coil(COIL_WRITE_ENABLE)
 
     # 写使能线圈
     if address == COIL_WRITE_ENABLE:
         apply_write_enable_effect(int(value))
-        # logger.info("Write enable updated: %s", int(value))
+        # print("[ControlLogic] WARNING: Write enable updated: %s", int(value))
         return
 
     # 写使能关闭时直接拒绝其他写入（批量控制也受此限制）
@@ -1558,7 +1641,7 @@ def hmi_write_trigger(address: int, value: int):
     if COIL_FAN_SWITCH_WRITE_START <= address < COIL_FAN_SWITCH_WRITE_END:
         fan_index = address - COIL_FAN_SWITCH_WRITE_START
         write_fan_switch(fan_index, value)
-        # logger.info("Fan switch: idx=%s addr=%s value=%s",
+        # print("[ControlLogic] INFO: Fan switch: idx=%s addr=%s value=%s",
         #             fan_index, address, int(value))
         return
 
@@ -1566,7 +1649,7 @@ def hmi_write_trigger(address: int, value: int):
     if PUMP_DUTY_WRITE_START <= address < PUMP_DUTY_WRITE_END:
         pump_index = address - PUMP_DUTY_WRITE_START
         write_pump_duty(pump_index, value)
-        # logger.info("Pump duty: idx=%s addr=%s duty=%s",
+        # print("[ControlLogic] INFO: Pump duty: idx=%s addr=%s duty=%s",
         #             pump_index, address, int(value))
         return
 
@@ -1574,14 +1657,14 @@ def hmi_write_trigger(address: int, value: int):
     if PV_DUTY_WRITE_START <= address < PV_DUTY_WRITE_END:
         pv_index = address - PV_DUTY_WRITE_START
         write_pv_duty(pv_index, value)
-        # logger.info("PV duty: idx=%s addr=%s duty=%s",
+        # print("[ControlLogic] INFO: PV duty: idx=%s addr=%s duty=%s",
         #             pv_index, address, int(value))
         return
 
     # 水泵批量占空比写入寄存器
     if address == PUMP_BATCH_DUTY_REGISTER:
         batch_write_pump_duty(value)
-        # logger.info("Pump batch duty triggered: addr=%s duty=%s", address, int(value))
+        # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
         return
 
 # 注册写入回调

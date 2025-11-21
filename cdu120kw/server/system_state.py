@@ -7,12 +7,10 @@
 """
 
 import json
-import logging
 from collections import OrderedDict
 
 from flask import Response
 
-logger = logging.getLogger(__name__)
 
 
 def get_register_value(registers, address, default=0):
@@ -260,7 +258,7 @@ def get_all_system_states(mapping_task_manager):
         )
 
     except Exception as e:
-        logger.critical(f"Failed to get all system states: {str(e)}")
+        print(f"[SystemState] CRITICAL: Failed to get all system states: {str(e)}")
         result = OrderedDict(
             [("code", 1), ("message", f"InternalError: {str(e)}"), ("data", [])]
         )

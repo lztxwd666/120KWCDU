@@ -45,12 +45,12 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
                     try:
                         self.client.close()
                     except (ConnectionError, OSError) as e:
-                        self.logger.warning(f"Error closing old connection: {e}")
+                        print(f"[ModbusTCPConnection] ERROR: Error closing old connection: {e}")
                 self.client = ModbusTcpClient(host=self.ip, port=self.port, retries=3)
                 if self.client.connect():
                     self.connected = True
                     self.auto_reconnect = True
-                    self.logger.info("TCP connection re-established successfully")
+                    print("[ModbusTCPConnection] INFO: TCP connection re-established successfully")
                     self._has_logged_disconnect = False
                     self._reconnect_attempts = 0
                     return True
@@ -60,9 +60,7 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
                     self._reconnect_attempts += 1
                     # 只在第一次断开时输出断开日志
                     if not self._has_logged_disconnect:
-                        self.logger.warning(
-                            "TCP connection lost, start reconnecting..."
-                        )
+                        print("[ModbusTCPConnection] WARNING: TCP connection lost, start reconnecting...")
                         self._has_logged_disconnect = True
             except (
                     ConnectionRefusedError,
@@ -70,12 +68,12 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
                     socket.gaierror,
                     pymodbus.exceptions.ModbusException,
             ) as e:
-                self.logger.error(f"TCP connection exception: {str(e)}")
+                print(f"[ModbusTCPConnection] ERROR: TCP connection exception: {str(e)}")
                 self.client = None
                 self.connected = False
                 return False
             except OSError as e:
-                self.logger.error(f"Network anomaly: {str(e)}")
+                print(f"[ModbusTCPConnection] ERROR: Network anomaly: {str(e)}")
                 self.client = None
                 self.connected = False
                 return False
@@ -115,7 +113,7 @@ def safe_modbustcp_call(manager, func, *args, **kwargs):
     for attempt in range(max_retries):
         client = manager.get_client()
         if not client:
-            manager.logger.error("No available TCP connection")
+            print("[ModbusTCPConnection] ERROR: No available TCP connection")
             return None
         try:
             return func(client, *args, **kwargs)
@@ -124,25 +122,22 @@ def safe_modbustcp_call(manager, func, *args, **kwargs):
             pymodbus.exceptions.ModbusException,
             OSError,
         ) as e:
-            manager.logger.warning(
-                f"TCP operation failed {attempt + 1}/{max_retries}): {str(e)}"
-            )
+            print(f"[ModbusTCPConnection] WARNING: TCP operation failed {attempt + 1}/{max_retries}): {str(e)}")
             with manager.connection_lock:
                 try:
                     client.close()
                 except (ConnectionError, OSError) as e:
-                    manager.logger.warning(f"Error closing TCP connection: {e}")
+                    print(f"[ModbusTCPConnection] WARNING: Error closing TCP connection: {e}")
                 manager.connected = False
             time.sleep(0.5)
         except (ValueError, TypeError) as e:
-            manager.logger.error(f"TCP parameter error: {str(e)}")
+            print(f"[ModbusTCPConnection] ERROR: TCP parameter error: {str(e)}")
             return None
         except Exception as e:
-            manager.logger.error(f"TCP unknown error: {str(e)}")
+            print(f"[ModbusTCPConnection] ERROR: TCP unknown error: {str(e)}")
             return None
-    manager.logger.error(f"TCP operation retry {max_retries} still Failed")
+    print(f"[ModbusTCPConnection] ERROR: TCP operation retry {max_retries} still Failed")
     return None
-
 
 # 实例化管理器
 modbustcp_manager = ModbusTCPConnectionManager()

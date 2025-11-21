@@ -4,7 +4,6 @@
 """
 
 import json
-import logging
 import time
 
 from cdu120kw.modbus_manager.batch_reader import ModbusBatchReader
@@ -43,7 +42,6 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
         rtu_reconnect_mgr=None,
     ):
         super().__init__(pool_workers=pool_workers)
-        self.logger = logging.getLogger(__name__)
         self.tcp_manager = tcp_manager
         self.rtu_manager = rtu_manager
         self.tcp_reader = ModbusBatchReader(self.tcp_manager)
@@ -74,11 +72,9 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
                     kwargs=None,
                     priority=priority,
                 )
-            self.logger.info(
-                f"Loaded {len(config.get('low_frequency_tasks', []))} low frequency task"
-            )
+            print(f"[LowFrequencyTask] INFO: Loaded {len(config.get('low_frequency_tasks', []))} low frequency task")
         except Exception as e:
-            self.logger.error(f"Failed to load low frequency task configuration: {e}")
+            print(f"[LowFrequencyTask] ERROR: Failed to load low frequency task configuration: {e}")
 
     def execute_task(self, comm_task):
         """
@@ -97,9 +93,7 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
             else:
                 self._default_tcp_read(comm_task)
         except Exception as e:
-            self.logger.error(
-                f"LowFrequencyTask execute_task exception: {e}", exc_info=True
-            )
+            print(f"[LowFrequencyTask] ERROR: LowFrequencyTask execute_task exception: {e}")
         # 持续任务重新入队
         if comm_task.operation_type == 0 and not self.shutdown_event.is_set():
             if comm_task.name != "RTUHeartbeat" or self.rtu_heartbeat_enabled:
@@ -118,7 +112,7 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
         """
         if self.rtu_reader is None:
             if not self._rtu_heartbeat_lost_logged:
-                self.logger.warning("No RTU connection available, skip force RTU task")
+                print("[LowFrequencyTask] WARNING: No RTU connection available, skip force RTU task")
                 self._rtu_heartbeat_lost_logged = True
             return
         if comm_task.is_bit:
@@ -126,34 +120,26 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
                 comm_task.start_address, comm_task.length
             )
             # if values:
-            #     self.logger.info(
-            #         f"Coil read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}"
-            #     )
+            #     print(f"[LowFrequencyTask] INFO: Coil read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}")
             # else:
-            #     self.logger.info(
-            #         f"Coil read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: []"
-            #     )
+            #     print(f"[LowFrequencyTask] INFO: Coil read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: []")
         else:
             values, err = self.rtu_reader.read_holding_registers(
                 comm_task.start_address, comm_task.length
             )
             # if values:
-            #     self.logger.info(
-            #         f"Register read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}"
-            #     )
+            #     print(f"[LowFrequencyTask] INFO: Register read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}")
             # else:
-            #     self.logger.info(
-            #         f"Register read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: []"
-            #     )
+            #     print(f"[LowFrequencyTask] INFO: Register read(rtu): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: []")
         if values:
             if self._rtu_heartbeat_failed:
-                self.logger.info("RTUHeartbeat recovered")
+                print("[LowFrequencyTask] INFO: RTUHeartbeat recovered")
             self._rtu_heartbeat_failed = False
             self._rtu_heartbeat_lost_logged = False
         else:
             if not self._rtu_heartbeat_failed:
                 if not self._rtu_heartbeat_lost_logged:
-                    self.logger.warning(f"RTUHeartbeat lost, error: {err}")
+                    print(f"[LowFrequencyTask] WARNING: RTUHeartbeat lost, error: {err}")
                     self._rtu_heartbeat_lost_logged = True
                 self._rtu_heartbeat_failed = True
             if self.rtu_manager:
@@ -179,36 +165,28 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
                 kwargs=None,
                 priority=priority,
             )
-            self.logger.info("RTUHeartbeat task re-enabled after reconnection")
+            print("[LowFrequencyTask] INFO: RTUHeartbeat task re-enabled after reconnection")
 
     def _default_tcp_read(self, comm_task):
         """
         默认使用TCP连接读取任务
         """
         if self.tcp_reader is None:
-            self.logger.warning("No TCP connection available, skip low frequency task")
+            print("[LowFrequencyTask] WARNING: No TCP connection available, skip low frequency task")
             return
         if comm_task.is_bit:
             values, err = self.tcp_reader.read_coils(
                 comm_task.start_address, comm_task.length
             )
             if values:
-                self.logger.info(
-                    f"Coil read(tcp): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}"
-                )
+                print(f"[LowFrequencyTask] INFO: Coil read(tcp): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}")
             else:
-                self.logger.warning(
-                    f"Coil read failed(tcp): {comm_task.name}, error: {err}"
-                )
+                print(f"[LowFrequencyTask] WARNING: Coil read failed(tcp): {comm_task.name}, error: {err}")
         else:
             values, err = self.tcp_reader.read_holding_registers(
                 comm_task.start_address, comm_task.length
             )
             if values:
-                self.logger.info(
-                    f"Register read(tcp): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}"
-                )
+                print(f"[LowFrequencyTask] INFO: Register read(tcp): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}")
             else:
-                self.logger.warning(
-                    f"Register read failed(tcp): {comm_task.name}, error: {err}"
-                )
+                print(f"[LowFrequencyTask] WARNING: Register read failed(tcp): {comm_task.name}, error: {err}")

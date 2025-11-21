@@ -40,7 +40,20 @@
     "secret_key": "default-secret-key",
     "debug": false
   },
-  "log": {
-    "level": "INFO"
+  "pid_pump": {
+    "Dt": 2,
+    "Kd": 0,
+    "Ki": 0.0,
+    "Kp": 0.05,
+    "outputmin": 0,
+    "outputmax": 100
+  },
+  "pid_pv": {
+    "Dt": 2,
+    "Kd": 0,
+    "Ki": 0.0,
+    "Kp": 1.0,
+    "outputmin": 0,
+    "outputmax": 100
   }
 }

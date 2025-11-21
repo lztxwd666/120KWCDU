@@ -2,7 +2,6 @@
 Modbus连接管理器基类
 """
 
-import logging
 import threading
 
 
@@ -25,7 +24,6 @@ class ModbusConnectionManagerBase:
         self.client = None
         self.connected = False
         self.connection_lock = threading.Lock()
-        self.logger = logging.getLogger(self.__class__.__name__)
         self.auto_reconnect = True
 
     def connect(self, *args, **kwargs) -> bool:
@@ -42,9 +40,9 @@ class ModbusConnectionManagerBase:
             if self.client:
                 try:
                     self.client.close()
-                    self.logger.info("Connection closed")
+                    print("Connection closed")
                 except Exception as e:
-                    self.logger.error(f"Close connection exception: {str(e)}")
+                    print(f"Close connection exception: {str(e)}")
                 finally:
                     self.connected = False
                     self.client = None

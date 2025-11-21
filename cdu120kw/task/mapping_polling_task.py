@@ -3,21 +3,11 @@
 """
 
 import json
-import logging
 import threading
 import time
 
 from cdu120kw.modbus_manager.batch_reader import ModbusBatchReader
 from cdu120kw.task.task_queue import BasePollingTaskManager
-
-# 在类外部初始化日志
-write_logger = logging.getLogger("register_write")
-write_logger.setLevel(logging.INFO)
-if not write_logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
-    handler.setFormatter(formatter)
-    write_logger.addHandler(handler)
 
 
 class CommunicationTask:
@@ -76,7 +66,7 @@ class RegisterMap:
                 if old_v == v:
                     continue  # 新旧值一致，跳过写入
                 self.registers[addr] = v  # 只有值变化时才写入
-                # write_logger.info(f"Register address writing:address={addr}, old value={old_v}, new value={v}")
+                # print(f"[MappingPollingTask] INFO: Register address writing:address={addr}, old value={old_v}, new value={v}")
 
     def update_coils(self, start_address, values):
         """
@@ -92,7 +82,7 @@ class RegisterMap:
                 if old_v == v:
                     continue  # 新旧值一致，跳过写入
                 self.coils[addr] = v  # 只有值变化时才写入
-                # write_logger.info(f"Coil address writing:address={addr}, old value={old_v}, new value={v}")
+                # print(f"[MappingPollingTask] INFO: Coil address writing:address={addr}, old value={old_v}, new value={v}")
 
     def set_register(self, address, value):
         with self.lock:
@@ -119,7 +109,6 @@ class MappingPollingTaskManager(BasePollingTaskManager):
         rtu_reconnect_mgr=None,
     ):
         super().__init__(pool_workers=pool_workers)
-        self.logger = logging.getLogger(__name__)
         self.tcp_manager = tcp_manager
         self.rtu_manager = rtu_manager
         self.tcp_reader = ModbusBatchReader(self.tcp_manager)
@@ -152,9 +141,7 @@ class MappingPollingTaskManager(BasePollingTaskManager):
                 self.current_mode = "none"
                 self.pause()  # 进入暂停
             if self.current_mode != prev_mode:
-                self.logger.info(
-                    f"Switch hosted mode: {prev_mode} -> {self.current_mode}"
-                )
+                print(f"[MappingPollingTask] INFO: Switch hosted mode: {prev_mode} -> {self.current_mode}")
 
     def load_tasks(self, config_path):
         """
@@ -163,7 +150,11 @@ class MappingPollingTaskManager(BasePollingTaskManager):
         try:
             with open(config_path, "r", encoding="utf-8-sig") as f:
                 config = json.load(f)
-            for task_params in config.get("tasks", []):
+            tasks = config.get("tasks", [])
+            if not tasks:
+                print("[MappingPollingTask] WARNING: No communication task found in config")
+                return
+            for task_params in tasks:
                 comm_task = CommunicationTask(task_params)
                 priority = 10 - comm_task.level
                 self.task_queue.put_task(
@@ -172,11 +163,9 @@ class MappingPollingTaskManager(BasePollingTaskManager):
                     kwargs=None,
                     priority=priority,
                 )
-            self.logger.info(
-                f"Loaded {len(config.get('tasks', []))} communication task"
-            )
+            print(f"[MappingPollingTask] INFO: Loaded {len(tasks)} communication task")
         except Exception as e:
-            self.logger.error(f"Failed to load task configuration: {e}")
+            print(f"[MappingPollingTask] ERROR: Failed to load task configuration: {e}")
 
     def execute_task(self, comm_task):
         """
@@ -195,7 +184,7 @@ class MappingPollingTaskManager(BasePollingTaskManager):
             else self.rtu_reconnect_mgr
         )
         if reader is None:
-            self.logger.warning("No Modbus connection available, skip task")
+            print("[MappingPollingTask] WARNING: No Modbus connection available, skip task")
             return False
         # 只处理读任务
         success = False
@@ -207,13 +196,9 @@ class MappingPollingTaskManager(BasePollingTaskManager):
                 if values:
                     self.reg_map.update_coils(comm_task.start_address, values)
                     success = True
-                    # self.logger.info(
-                    #     f"Coil read({self.current_mode}): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}"
-                    # )
+                    # print(f"[MappingPollingTask] INFO: Coil read({self.current_mode}): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}")
                 else:
-                    self.logger.warning(
-                        f"Coil read failed({self.current_mode}): {comm_task.name}, error: {err}"
-                    )
+                    print(f"[MappingPollingTask] WARNING: Coil read failed({self.current_mode}): {comm_task.name}, error: {err}")
                     with manager.connection_lock:
                         manager.connected = False
                     if reconnect_mgr and reconnect_mgr.is_active():
@@ -226,13 +211,9 @@ class MappingPollingTaskManager(BasePollingTaskManager):
                 if values:
                     self.reg_map.update_registers(comm_task.start_address, values)
                     success = True
-                    # self.logger.info(
-                    #     f"Register read({self.current_mode}): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}"
-                    # )
+                    # print(f"[MappingPollingTask] INFO: Register read({self.current_mode}): {comm_task.name}, addr {comm_task.start_address}~{comm_task.start_address + comm_task.length - 1}, values: {values[:5]}")
                 else:
-                    self.logger.warning(
-                        f"Register read failed({self.current_mode}): {comm_task.name}, error: {err}"
-                    )
+                    print(f"[MappingPollingTask] WARNING: Register read failed({self.current_mode}): {comm_task.name}, error: {err}")
                     with manager.connection_lock:
                         manager.connected = False
                     if reconnect_mgr and reconnect_mgr.is_active():

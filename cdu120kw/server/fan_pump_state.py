@@ -4,13 +4,11 @@
 """
 
 import json
-import logging
 import time
 from collections import OrderedDict
 
 from flask import Response
 
-logger = logging.getLogger(__name__)
 
 # 用于记录风扇损坏状态的持续时间
 fan_fault_time: list[float] = [0.0] * 16
@@ -153,7 +151,7 @@ def get_all_fans(mapping_task_manager):
         )
 
     except Exception as e:
-        logger.critical(f"Failed to get all fans: {str(e)}")
+        print(f"[Fan] CRITICAL: Failed to get all fans: {str(e)}")
         result = OrderedDict(
             [("code", 1), ("message", f"InternalError: {str(e)}"), ("data", [])]
         )
@@ -276,7 +274,7 @@ def get_all_pumps(mapping_task_manager):
         )
 
     except Exception as e:
-        logger.critical(f"Failed to get all pumps: {str(e)}")
+        print(f"[Pump] CRITICAL: Failed to get all pumps: {str(e)}")
         result = OrderedDict(
             [("code", 1), ("message", f"InternalError: {str(e)}"), ("data", [])]
         )

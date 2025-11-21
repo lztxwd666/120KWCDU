@@ -3,34 +3,39 @@
 负责初始化日志系统，确保单实例运行,启动应用控制器
 """
 
-"""
-主程序入口 - 修复版
-修复多次Ctrl+C中断导致的异常问题
-"""
-
 import atexit
-import logging
 import os
 import signal
 import sys
 import tempfile
 import time
-from logging.handlers import TimedRotatingFileHandler
+import logging
 from typing import Optional, TextIO
 
 import portalocker
 
+# 配置日志系统，忽略pymodbus库中的特定噪音日志，以减少日志污染
+class IgnorePymodbusNoise(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        if "failed: timed out" in msg:
+            return False
+        if "could not open port" in msg:
+            return False
+        return True
+
+logging.getLogger("pymodbus").addFilter(IgnorePymodbusNoise())
+logging.getLogger("pymodbus.logging").addFilter(IgnorePymodbusNoise())
 
 def get_resource_path(relative_path):
     """获取资源的绝对路径，兼容开发环境和打包环境"""
     try:
-        # 检查是否存在 _MEIPASS 属性
         if hasattr(sys, '_MEIPASS'):
             base_path = sys._MEIPASS
         else:
             base_path = os.path.abspath(".")
     except AttributeError as e:
-        logging.error(f"Cannot access _MEIPASS Attribute: {e}")
+        print(f"[Main] ERROR: Cannot access _MEIPASS Attribute: {e}")
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
@@ -38,59 +43,10 @@ from cdu120kw.service_function.controller_app import AppController
 
 lock_file_handle: Optional[TextIO] = None
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-# 在设置日志之前，确保log文件夹存在
-log_dir = "log"
-os.makedirs(log_dir, exist_ok=True)
-
-file_handler = TimedRotatingFileHandler(
-    filename=os.path.join(log_dir, "app.log"),
-    when="midnight",
-    interval=1,
-    backupCount=7,
-    encoding="utf-8",
-)
-console_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
-
-
-class Ignore3rdPartyErrorFilter(logging.Filter):
-    """
-    过滤掉第三方库产生的已知无害错误日志
-    例如requests库的连接超时错误
-    这些错误不影响程序运行，且会频繁出现
-    只保留其他重要日志
-    过滤规则可根据需要调整
-    """
-
-    def filter(self, record):
-        msg = record.getMessage()
-        if "Connection to (" in msg and "failed: timed out" in msg:
-            return False
-        if "could not open port" in msg:
-            return False
-        return True
-
-
-for handler in logger.handlers:
-    handler.addFilter(Ignore3rdPartyErrorFilter())
-
-
 def is_already_running_with_lock():
     """
     使用文件锁确保单实例运行
     如果已经有实例在运行，返回True，否则返回False
-    通过在临时目录创建一个锁文件，并尝试获取独占锁
-    如果获取锁失败，说明已有实例在运行
-    失败时不抛出异常，直接返回True
-    这样可以避免程序崩溃
-    只要程序正常退出，锁文件会被正确释放
-    这样下次启动时可以重新获取锁
     """
     global lock_file_handle
     lock_filename = os.path.join(tempfile.gettempdir(), "redfish_v1.lock")
@@ -101,27 +57,22 @@ def is_already_running_with_lock():
     except portalocker.exceptions.LockException:
         return True
 
-
 def cleanup_lock_file():
     """
     清理锁文件，释放文件锁
-    在程序退出时调用，确保锁文件被正确释放
-    这样下次启动时可以重新获取锁
     """
     global lock_file_handle
     if lock_file_handle is not None:
         try:
             portalocker.unlock(lock_file_handle)
             lock_file_handle.close()
-            logging.info("The lock file has been released")
+            print("[Main] INFO: The lock file has been released")
         except Exception as cleanup_error:
-            logging.warning(f"Failed to release lock file: {cleanup_error}")
-
+            print(f"[Main] WARNING: Failed to release lock file: {cleanup_error}")
 
 # 全局变量，用于跟踪清理状态
 is_cleaning_up = False
 interrupt_count = 0
-
 
 def signal_handler(sig, frame):
     """
@@ -133,16 +84,15 @@ def signal_handler(sig, frame):
 
     if is_cleaning_up:
         if interrupt_count >= 3:
-            logger.info("Force program exit...")
+            print("[Main] INFO: Force program exit...")
             sys.exit(1)
         else:
-            logger.info(f"Cleaning is in progress, please wait... (enter {3 - interrupt_count} 次 Ctrl+C 强制退出)")
+            print(f"[Main] INFO: Cleaning is in progress, please wait... (enter {3 - interrupt_count} 次 Ctrl+C 强制退出)")
             return
 
     is_cleaning_up = True
-    logger.info("Received interrupt signal, start cleaning resources...")
-    logger.info("Please wait for the cleaning to complete and do not press again Ctrl+C")
-
+    print("[Main] INFO: Received interrupt signal, start cleaning resources...")
+    print("[Main] INFO: Please wait for the cleaning to complete and do not press again Ctrl+C")
 
 if __name__ == "__main__":
     controller = None
@@ -151,11 +101,11 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
 
     if is_already_running_with_lock():
-        print("The program is already running and cannot open multiple instances。")
+        print("[Main] ERROR: The program is already running and cannot open multiple instances。")
         sys.exit(1)
 
     atexit.register(cleanup_lock_file)
-    logger.info("Application startup in progress...")
+    print("[Main] INFO: Application startup in progress...")
 
     try:
         controller = AppController()
@@ -167,13 +117,13 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         # 这里应该不会被执行，因为信号处理器已经接管了中断
-        logger.info("Received interrupt signal, clear resources...")
+        print("[Main] INFO: Received interrupt signal, clear resources...")
         if controller:
             controller.cleanup()
         sys.exit(0)
 
     except Exception as startup_error:
-        logger.exception(f"Application startup failed: {str(startup_error)}")
+        print(f"[Main] ERROR: Application startup failed: {str(startup_error)}")
         if controller:
             controller.cleanup()
         sys.exit(1)
@@ -181,6 +131,5 @@ if __name__ == "__main__":
     finally:
         # 确保资源被清理
         if controller and not is_cleaning_up:
-            logger.info("Perform final cleaning...")
+            print("[Main] INFO: Perform final cleaning...")
             controller.cleanup()
-

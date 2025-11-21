@@ -7,7 +7,6 @@ Modbus HMI 从站数据接口实现
 """
 
 import json
-import logging
 import os
 import threading
 import time
@@ -18,15 +17,6 @@ from pymodbus.device import ModbusDeviceIdentification
 from pymodbus.server import StartSerialServer
 
 from cdu120kw.control_logic.device_data_manipulation import processed_reg_map
-
-# Logger（避免重复 handler 与冒泡）
-logger = logging.getLogger("modbus_hmi")
-if not logger.handlers:
-    _h = logging.StreamHandler()
-    _h.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
-    logger.addHandler(_h)
-logger.setLevel(logging.INFO)
-logger.propagate = False  # 不向上冒泡，避免重复日志
 
 # 仅允许启动一次 Modbus HMI 线程，防止单例多开、重启
 _modbus_hmi_thread_started = False
@@ -89,7 +79,7 @@ class DynamicModbusSlaveContext(ModbusSlaveContext):
         elapsed = now - self._last_beat_ts
         if elapsed >= self._beat_interval:
             rps = self._req_count / elapsed if elapsed > 0 else 0.0
-            logger.info("HMI Read heartbeat: count=%d, rps=%.1f", self._req_count, rps)
+            print(f"[HMI] INFO: HMI Read heartbeat: count={self._req_count}, rps={rps:.1f}")
             self._req_count = 0
             self._last_beat_ts = now
 
@@ -106,12 +96,12 @@ class DynamicModbusSlaveContext(ModbusSlaveContext):
                 values = [_to_u16(v) for v in raw]
             else:
                 values = [0] * count
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("HMI read fx=%s addr=%s cnt=%s -> %s", fx, address, count, values)
-            self._heartbeat()
+            # DEBUG 日志可选
+            # print(f"[HMI] DEBUG: HMI read fx={fx} addr={address} cnt={count} -> {values}")
+            # self._heartbeat()
             return values
         except Exception as e:
-            logger.error("HMI read error fx=%s addr=%s cnt=%s: %s", fx, address, count, e, exc_info=True)
+            print(f"[HMI] ERROR: HMI read error fx={fx} addr={address} cnt={count}: {e}")
             return [0] * count
 
     def setValues(self, fx, address, values):
@@ -121,9 +111,7 @@ class DynamicModbusSlaveContext(ModbusSlaveContext):
             norm = [_to_bit(v) for v in values]
             for i, v in enumerate(norm):
                 processed_reg_map.set_coil(address + i, v)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("HMI write coils fx=%s addr=%s values=%s", fx, address, norm)
-            # logger.info("HMI write coils fx=%s addr=%s values=%s", fx, address, norm)
+            # print(f"[HMI] DEBUG: HMI write coils fx={fx} addr={address} values={norm}")
             return
 
         # 保持寄存器相关写入
@@ -131,13 +119,10 @@ class DynamicModbusSlaveContext(ModbusSlaveContext):
             norm = [_to_u16(v) for v in values]
             for i, v in enumerate(norm):
                 processed_reg_map.set_register(address + i, v)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("HMI write registers fx=%s addr=%s values=%s", fx, address, norm)
-            # logger.info("HMI write registers fx=%s addr=%s values=%s", fx, address, norm)
+            # print(f"[HMI] DEBUG: HMI write registers fx={fx} addr={address} values={norm}")
             return
+        # print(f"[HMI] DEBUG: HMI write ignored fx={fx} addr={address} values={values}")
 
-        # 其他功能码忽略
-        logger.debug("HMI write ignored fx=%s addr=%s values=%s", fx, address, values)
 
 # Server 构建与运行
 def _build_modbus_context(single: bool = True) -> ModbusServerContext:
@@ -163,7 +148,6 @@ def _run_modbus_rtu_server():
     identity.ModelName = _IDENTITY_CFG.get("ModelName", "")
     identity.MajorMinorRevision = _IDENTITY_CFG.get("MajorMinorRevision", "")
 
-    logger.info("Preparing to start ModbusRTU slave...")
     # 更积极的串口参数，降低卡顿：较短超时与无重试
     port = _RTU_CFG.get("port", "COM1")
     baudrate = _RTU_CFG.get("baud_rate", 9600)
@@ -194,7 +178,7 @@ def _run_modbus_rtu_server():
             # 正常退出（一般不会发生）
             return
         except Exception as e:
-            logger.warning("RTU slave startup failed:% s, will retry in 5 seconds...", e)
+            print(f"[HMI] WARNING: RTU slave startup failed: {e}, will retry in 5 seconds...")
             time.sleep(5)
 
 
@@ -205,10 +189,9 @@ def start_modbus_hmi_server():
     global _modbus_hmi_thread_started
     with _modbus_hmi_thread_lock:
         if _modbus_hmi_thread_started:
-            logger.warning("Modbus HMI Thread is already running, skipping duplicate starts")
+            print("[HMI] WARNING: Modbus HMI Thread is already running, skipping duplicate starts")
             return
         _modbus_hmi_thread_started = True
 
     t = threading.Thread(target=_run_modbus_rtu_server, name="HMI-RTU-Server", daemon=True)
     t.start()
-    logger.info("Modbus HMI server thread started.")

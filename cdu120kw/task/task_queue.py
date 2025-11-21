@@ -2,7 +2,6 @@
 任务队列管理模块，支持优先级插队、线程安全、优雅关闭等功能
 """
 
-import logging
 import threading
 import time
 from queue import PriorityQueue, Empty
@@ -145,7 +144,6 @@ class BasePollingTaskManager:
     """
 
     def __init__(self, pool_workers=2):
-        self.logger = logging.getLogger(__name__)
         self.task_queue = TaskQueueManager()
         self.shutdown_event = threading.Event()
         self.thread_pool = []
@@ -189,9 +187,7 @@ class BasePollingTaskManager:
         with self.pause_cond:
             while self.paused:
                 if not self._has_logged_polling_paused:
-                    self.logger.info(
-                        "Polling paused, waiting for connection recovery..."
-                    )
+                    print("[TaskQueue] INFO: Polling paused, waiting for connection recovery...")
                     self._has_logged_polling_paused = True
                 self.pause_cond.wait(timeout=1)
 
@@ -217,14 +213,12 @@ class BasePollingTaskManager:
                                 break
                             else:
                                 if not has_logged_task_retry:
-                                    self.logger.info(
-                                        "Task execution failed, will retry after connection recovery..."
-                                    )
+                                    print("[TaskQueue] INFO: Task execution failed, will retry after connection recovery...")
                                     has_logged_task_retry = True
                                 self.wait_if_paused()
                                 time.sleep(1)
                         except Exception as e:
-                            self.logger.error(f"Task execution exception: {e}")
+                            print(f"[TaskQueue] ERROR: Task execution exception: {e}")
                             self.wait_if_paused()
                             time.sleep(1)
                 finally:

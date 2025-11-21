@@ -96,12 +96,12 @@ def configure_web_routes(app: Flask):
     static_dir = find_static_directory()
 
     if static_dir is None:
-        app.logger.error("Static resource directory not found in any location")
-        app.logger.error("Web interface will not be available")
+        print("ERROR: Static resource directory not found in any location")
+        print("ERROR: Web interface will not be available")
         # 不抛出异常，让程序继续运行（API 可能仍然可用）
         return
 
-    # app.logger.info(f"Using static resource directory: {static_dir}")
+    # print(f"INFO: Using static resource directory: {static_dir}")
 
     # 提供静态资源文件 (如JS、CSS、图片等)
     @app.route("/assets/<path:filename>")
@@ -113,12 +113,12 @@ def configure_web_routes(app: Flask):
 
         # 安全检查：防止目录遍历攻击
         if '..' in filename or filename.startswith('/'):
-            app.logger.warning(f"Potential directory traversal attempt: {filename}")
+            print(f"WARNING: Potential directory traversal attempt: {filename}")
             return "Invalid filename", 400
 
         file_path = os.path.join(assets_dir, filename)
         if not os.path.exists(file_path) or not os.path.isfile(file_path):
-            app.logger.warning(f"Asset not found: {filename}")
+            print(f"WARNING: Asset not found: {filename}")
             return "Asset not found", 404
 
         return send_from_directory(assets_dir, filename)
@@ -131,13 +131,13 @@ def configure_web_routes(app: Flask):
         对所有非API的GET请求，返回前端入口页面 index.html
         """
         if request.method != "GET":
-            app.logger.warning(f"Method not allowed: {request.method} {request.path}")
+            print(f"WARNING: Method not allowed: {request.method} {request.path}")
             return "Method Not Allowed", 405
 
         # 检查 index.html 是否存在
         index_path = os.path.join(static_dir, "index.html")
         if not os.path.exists(index_path):
-            app.logger.error(f"index.html not found in static resource directory: {static_dir}")
+            print(f"ERROR: index.html not found in static resource directory: {static_dir}")
 
             # 返回一个简单的错误页面，而不是 500 错误
             return """
@@ -177,19 +177,19 @@ def configure_web_routes(app: Flask):
         - 其他路由返回SPA入口页面
         """
         if request.path.startswith("/api/") or request.path.startswith("/redfish/"):
-            app.logger.warning(f"API resource not found: {request.path}")
+            print(f"WARNING: API resource not found: {request.path}")
             return {
                 "error": "Not found",
                 "code": 404,
                 "message": "The requested resource does not exist",
             }, 404
 
-        app.logger.info(f"Route not found, serving SPA entry: {request.path}")
+        print(f"INFO: Route not found, serving SPA entry: {request.path}")
 
         # 检查 index.html 是否存在
         index_path = os.path.join(static_dir, "index.html")
         if not os.path.exists(index_path):
-            app.logger.error(f"index.html not found in static resource directory: {static_dir}")
+            print(f"ERROR: index.html not found in static resource directory: {static_dir}")
             return "Web interface not available", 500
 
         return send_from_directory(static_dir, "index.html")

@@ -365,7 +365,7 @@
           "local": 3344,
           "remote": 0
         },
-        "r_d_pht_decimals": 1,
+        "r_d_pht_decimals": 2,
         "offset1": 0,
         "offset2": 0,
         "gain1": 1.0,
@@ -383,7 +383,7 @@
           "local": 3345,
           "remote": 0
         },
-        "r_d_pht_decimals": 1,
+        "r_d_pht_decimals": 2,
         "offset1": 0,
         "offset2": 0,
         "gain1": 1.0,
@@ -401,7 +401,7 @@
           "local": 3346,
           "remote": 0
         },
-        "r_d_pht_decimals": 1,
+        "r_d_pht_decimals": 2,
         "offset1": 0,
         "offset2": 0,
         "gain1": 1.0,
@@ -455,7 +455,7 @@
           "local": 3349,
           "remote": 0
         },
-        "r_d_pht_decimals": 1,
+        "r_d_pht_decimals": 3,
         "offset1": 0,
         "offset2": 0,
         "gain1": 1.0,

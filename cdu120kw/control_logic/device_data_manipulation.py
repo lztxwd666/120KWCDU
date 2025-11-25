@@ -216,6 +216,18 @@ ENVIRONMENT_STATUS_START = ENVIRONMENT_VALUE_END     # 起始地址：1152
 ENVIRONMENT_STATUS_END = ENVIRONMENT_STATUS_START + 16  # 结束地址：1168（排他性，实际范围1144-1167）
 
 
+def _load_config(config_path: str) -> dict:
+    """加载配置文件，支持相对路径"""
+    # 获取当前文件所在目录
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # 拼接到项目根目录
+    abs_path = os.path.join(base_dir, "..", config_path)
+    abs_path = os.path.normpath(abs_path)
+    with open(abs_path, "r", encoding="utf-8-sig") as f:
+        return json.load(f)
+
+CONFIG_CACHE = _load_config("config/cdu_120kw_component.json")
+
 class ProcessedRegisterMap:
     """
     存储处理后数据的寄存器表，分为线圈(coils)和保持寄存器(registers)
@@ -237,6 +249,11 @@ class ProcessedRegisterMap:
         self.registers[CONTROL_MODE_TARGET_FLOW_REGISTER] = 500      # 目标流量初始值 500 (50.0 L/min)
         self.registers[CONTROL_MODE_TARGET_TEMP_REGISTER] = 250      # 目标温度初始值 250 (25.0°C)
         self.registers[CONTROL_MODE_TARGET_PRESSUREDIFF_REGISTER] = 50  # 目标压差初始值 50 (0.5 MPa)
+
+        # 设置比例阀写入寄存器初始值为10000（100%占空比）
+        pv_count = len(CONFIG_CACHE.get("proportional_valve", []))
+        for i in range(pv_count):
+            self.registers[PV_DUTY_WRITE_START + i] = 10000
 
         # 回调函数列表初始化
         self._write_coil_callbacks = []
@@ -485,18 +502,6 @@ class ProcessedRegisterMap:
 
 # 全局处理后寄存器表实例，供外部访问
 processed_reg_map = ProcessedRegisterMap()
-
-def _load_config(config_path: str) -> dict:
-    """加载配置文件，支持相对路径"""
-    # 获取当前文件所在目录
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    # 拼接到项目根目录
-    abs_path = os.path.join(base_dir, "..", config_path)
-    abs_path = os.path.normpath(abs_path)
-    with open(abs_path, "r", encoding="utf-8-sig") as f:
-        return json.load(f)
-
-CONFIG_CACHE = _load_config("config/cdu_120kw_component.json")
 
 def to_u16(val):
     """负数转U16输出，两补码，正数不变"""
@@ -1023,7 +1028,9 @@ def process_environment_state(sensor_cfg, registers, sensor_index, now=None):
 
     # 计算物理量
     calc_val = (raw_val + offset1 + offset2) * gain1 * gain2 * gain3
-    calc_val_int = int(round(calc_val * (10 ** decimals)))
+
+    # 上位机取的三个值只保留一位小数，读取上来的值保留两位小数，因此需要 /10
+    calc_val_int = int(round(calc_val / 10))
 
     # 状态判定逻辑
     key = f"PHT_{sensor_index}"
@@ -1341,12 +1348,12 @@ def start_processed_register_sync(get_register_map_func, interval=0.15):
     t = threading.Thread(target=sync_loop, daemon=True)
     t.start()
 
-# 风扇延迟关停定时器与锁
+# 写入使能寄存器绑定业务逻辑
 def apply_write_enable_effect(enable: int):
     """
     纯业务逻辑函数：根据写使能变化执行设备动作
-    修改后的逻辑：
     - 如果写入使能写0，不管什么模式，都立即关停水泵和比例阀，风扇延迟关闭，同时立即停止自动控制线程
+    - 如果写入使能写1，设置比例阀占空比为10000（100%）
     - 如果切换到手动模式，只停止自动控制线程，保持当前设备状态
     """
     global _fan_shutdown_timer
@@ -1382,7 +1389,11 @@ def apply_write_enable_effect(enable: int):
         for i in range(len(fans)):
             write_fan_switch(i, 1, force=True)
 
-        print(f"[ControlLogic] INFO: Write enable=1 - starting all fans, control_mode={control_mode}")
+        # 设置比例阀占空比为10000（100%）
+        for i in range(len(pvs)):
+            batch_write_pv_duty(10000, force=True)
+
+        # print(f"[ControlLogic] INFO: Write enable=1 - starting all fans, setting PV duty to 10000, control_mode={control_mode}")
 
     else:
         # 写入使能为0：立即停止水泵与比例阀（占空比置 0），风扇延迟关闭
@@ -1618,6 +1629,47 @@ def batch_write_pump_duty(duty: int, slave: int = 1, priority: int = 0, force: b
 # 初始化重入保护标志
 batch_write_pump_duty._executing = False
 
+# 比例阀批量占空比写入函数
+def batch_write_pv_duty(duty: int, slave: int = 1, priority: int = 0, force: bool = False):
+    """
+    比例阀批量占空比写入函数
+    通过设置所有比例阀的单个写入寄存器来触发回调，实现批量写入
+    """
+    # 重入保护
+    if getattr(batch_write_pv_duty, '_executing', False):
+        print("[ControlLogic] WARNING: Batch write reentrancy detected")
+        return False
+
+    batch_write_pv_duty._executing = True
+
+    try:
+        # 检查写入使能
+        if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
+            print("[ControlLogic] WARNING: Pump batch duty write denied: write enable=0")
+            return False
+
+        # 获取比例阀列表
+        pv_list = CONFIG_CACHE.get("proportional_valve", [])
+        if not pv_list:
+            print("[ControlLogic] INFO: No pv configured for batch duty write")
+            return False
+
+        # 批量设置所有比例阀的写入寄存器
+        # print(f"[ControlLogic] INFO: Starting batch duty write for {len(pv_list)} pvs, duty={duty}")
+
+        for pv_index in range(len(pv_list)):
+            write_addr = PV_DUTY_WRITE_START + pv_index
+            processed_reg_map.set_register(write_addr, duty)
+
+        # print(f"[ControlLogic] INFO: Batch duty write completed - {len(pv_list)} registers updated")
+        return True
+
+    finally:
+        batch_write_pv_duty._executing = False
+
+# 比例阀初始化重入保护标志
+batch_write_pv_duty._executing = False
+
 # HMI写入触发回调函数
 def hmi_write_trigger(address: int, value: int):
     """
@@ -1666,6 +1718,12 @@ def hmi_write_trigger(address: int, value: int):
         batch_write_pump_duty(value)
         # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
         return
+    # 水泵批量占空比写入寄存器
+    if address == PV_BATCH_DUTY_REGISTER:
+        batch_write_pv_duty(value)
+        # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
+        return
+
 
 # 注册写入回调
 processed_reg_map.write_coil_callback(hmi_write_trigger)

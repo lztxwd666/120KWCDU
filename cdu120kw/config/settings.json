@@ -4,7 +4,7 @@
     "port": 5000
   },
   "modbus_rtu": {
-    "port": "COM10",
+    "port": "/dev/com2",
     "baud_rate": 115200,
     "byte_size": 8,
     "parity": "N",
@@ -13,7 +13,7 @@
   },
   "modbus_hmi": {
     "rtu": {
-      "port": "COM13",
+      "port": "/dev/com4",
       "baud_rate": 115200,
       "byte_size": 8,
       "parity": "N",
@@ -42,9 +42,9 @@
   },
   "pid_pump": {
     "Dt": 2,
-    "Kd": 0,
+    "Kd": 0.35,
     "Ki": 0.0,
-    "Kp": 0.05,
+    "Kp": 0.1,
     "outputmin": 0,
     "outputmax": 100
   },
@@ -53,7 +53,7 @@
     "Kd": 0,
     "Ki": 0.0,
     "Kp": 1.0,
-    "outputmin": 0,
+    "outputmin": 24,
     "outputmax": 100
   }
 }

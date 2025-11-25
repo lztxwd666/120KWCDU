@@ -10,7 +10,8 @@ from cdu120kw.control_logic.device_data_manipulation import (
     processed_reg_map, CONTROL_MODE, CONTROL_MODE_TARGET_FLOW_REGISTER,
     CONTROL_MODE_TARGET_TEMP_REGISTER, CONTROL_MODE_TARGET_PRESSUREDIFF_REGISTER,
     FLOW_VALUE_START, TEMP_VALUE_START, PRESS_DIFF_START,
-    batch_write_pump_duty, write_pv_duty, COIL_WRITE_ENABLE, CONFIG_CACHE
+    batch_write_pump_duty, batch_write_pv_duty, COIL_WRITE_ENABLE, CONFIG_CACHE, PUMP_CURRENT_START,
+    PUMP_DUTY_READ_START, PUMP_SPEED_START
 )
 from cdu120kw.control_logic.pid_helper import PidHelper
 
@@ -32,14 +33,25 @@ class AutoControlManager:
 
         # 控制状态
         self.last_pump_duty = 0  # 上一次的水泵占空比
-        self.last_pv_duty = 0    # 上一次的比例阀占空比
+        self.last_pv_duty = 10000    # 上一次的比例阀占空比
         self.is_running = False
         self.control_thread = None
-        self.control_interval = 2  # 控制周期（秒）
 
         # 添加中断标志和锁
         self._stop_requested = False
         self._stop_lock = threading.Lock()
+
+        # 模式切换状态,用于设置切换模式设置比例阀的初始值
+        self._mode_switch_in_progress = False  # 模式切换进行中标志
+        self._mode_switch_lock = threading.Lock()  # 模式切换锁
+
+        # 水泵启动状态管理
+        self._pump_startup_state = "idle"  # idle, checking, starting, ready, failed
+        self._pump_startup_start_time = 0
+        self._pump_startup_check_count = 0
+        self._initial_pump_duty_set = False
+        self._pump_startup_conditions_met_time = 0
+        self._pump_startup_lock = threading.Lock()
 
         # 注册控制模式变化回调和写入使能变化回调
         processed_reg_map.write_register_callback(self._on_control_mode_change)
@@ -58,6 +70,9 @@ class AutoControlManager:
             write_enable = processed_reg_map.get_coil(COIL_WRITE_ENABLE)
 
             # print(f"[AutoControl] DEBUG: Control mode callback triggered - addr={address}, value={value}, write_enable={write_enable}")
+
+            # 任何模式切换都需要将比例阀设置为100%开度
+            self._set_pv_to_100_percent_for_mode_switch()
 
             # 模式1：手动模式，停止自动调节，保持当前值
             if control_mode == 1:
@@ -106,6 +121,29 @@ class AutoControlManager:
                 return False
         return self.is_running
 
+    def _set_pv_to_100_percent_for_mode_switch(self):
+        """
+        模式切换时设置比例阀为100%开度
+        """
+        with self._mode_switch_lock:
+            if self._mode_switch_in_progress:
+                return
+
+            self._mode_switch_in_progress = True
+            try:
+                # 设置比例阀占空比为10000（100%）
+                success = batch_write_pv_duty(10000, force=True)
+                if success:
+                    self.last_pv_duty = 10000
+                    # print("[AutoControl] INFO: PV duty set to 10000 (100%) for mode switching")
+                else:
+                    print("[AutoControl] WARNING: Failed to set PV duty to 10000 for mode switching")
+            except Exception as e:
+                print(f"[AutoControl] ERROR: Failed to set PV duty to 10000: {e}")
+            finally:
+                self._mode_switch_in_progress = False
+
+
     def start_auto_control(self):
         """启动自动控制线程"""
         if self.is_running:
@@ -124,9 +162,20 @@ class AutoControlManager:
             print(f"[AutoControl] WARNING: Cannot start auto control - invalid control mode={control_mode}")
             return
 
+        # 启动自动控制前，确保比例阀设置为100%
+        self._set_pv_to_100_percent_for_mode_switch()
+
         # 重置停止请求标志
         with self._stop_lock:
             self._stop_requested = False
+
+        # 重置水泵启动状态
+        with self._pump_startup_lock:
+            self._pump_startup_state = "checking"
+            self._pump_startup_start_time = time.time()
+            self._pump_startup_check_count = 0
+            self._initial_pump_duty_set = False
+            self._pump_startup_conditions_met_time = 0
 
         self.is_running = True
         self.control_thread = threading.Thread(
@@ -135,7 +184,8 @@ class AutoControlManager:
             name="AutoControl"
         )
         self.control_thread.start()
-        # print(f"[AutoControl] INFO: Auto control started for mode {control_mode} with {self.pump_count} pumps")
+        print(f"[AutoControl] INFO: Auto control started for mode {control_mode} with {self.pump_count} pumps")
+
 
     def stop_auto_control(self):
         """停止机制，确保线程安全"""
@@ -147,7 +197,11 @@ class AutoControlManager:
         with self._stop_lock:
             self._stop_requested = True
 
-        # 尝试优雅停止
+        # 重置水泵启动状态
+        with self._pump_startup_lock:
+            self._pump_startup_state = "idle"
+
+        # 尝试停止
         if self.control_thread and self.control_thread.is_alive():
             self.control_thread.join(timeout=2.0)  # 适当延长超时
 
@@ -159,18 +213,26 @@ class AutoControlManager:
 
         print(f"[AutoControl] INFO: Auto control stopped")
 
+
     def _auto_control_loop(self):
-        """自动控制主循环 - 添加频繁的状态检查"""
-        # print("[AutoControl] DEBUG: Auto control loop started")
+        """自动控制主循环"""
+        print("[AutoControl] DEBUG: Auto control loop started")
 
         loop_count = 0
         while self._should_continue():
             try:
                 loop_count += 1
+                loop_start_time = time.time()  # 记录循环开始时间
 
                 # 在每个关键步骤前检查退出条件
                 if not self._should_continue():
                     break
+
+                # 新增：检查水泵启动状态
+                if not self._check_pump_startup_state():
+                    # 水泵未准备好，等待下一次循环
+                    time.sleep(0.5)  # 缩短等待时间以便更快响应
+                    continue
 
                 control_mode = processed_reg_map.get_register(CONTROL_MODE)
 
@@ -193,24 +255,201 @@ class AutoControlManager:
                     print(f"[AutoControl] WARNING: Unknown control mode in loop: {control_mode}")
                     break
 
-                # 使用更短的睡眠间隔，允许更频繁的检查
-                for _ in range(20):  # 将2秒拆分为20个0.1秒
+                # 使用PID配置中的dt作为采样周期
+                loop_end_time = time.time()
+                loop_duration = loop_end_time - loop_start_time
+
+                # 使用flow_pid的dt（只适用于所有PID实例的dt相同）
+                dt_target = self.flow_pid.dt
+                sleep_time = max(0, dt_target - loop_duration)
+
+                # 将睡眠时间拆分为小段，允许更频繁的中断检查
+                chunk_size = 0.1  # 每0.1秒检查一次
+                num_chunks = max(1, int(sleep_time / chunk_size))
+                for i in range(num_chunks):
                     if not self._should_continue():
                         break
-                    time.sleep(0.1)
+                    remaining_sleep = sleep_time - i * chunk_size
+                    time.sleep(min(chunk_size, remaining_sleep))
 
             except Exception as e:
                 print(f"[AutoControl] ERROR: Auto control loop error: {e}")
-                # 错误时也使用短间隔睡眠
-                for _ in range(20):
+                # 错误时也使用PID的dt作为睡眠间隔
+                dt_target = self.flow_pid.dt
+                chunk_size = 0.1
+                num_chunks = max(1, int(dt_target / chunk_size))
+                for i in range(num_chunks):
                     if not self._should_continue():
                         break
-                    time.sleep(0.1)
+                    time.sleep(chunk_size)
 
-        # print("[AutoControl] DEBUG: Auto control loop ended")
+        print("[AutoControl] DEBUG: Auto control loop ended")
+
+
+    def _check_pump_startup_state(self) -> bool:
+        """
+        检查水泵启动状态，返回True表示可以开始PID调节
+        """
+        with self._pump_startup_lock:
+            current_state = self._pump_startup_state
+
+        # 如果已经准备就绪，直接返回True
+        if current_state == "ready":
+            return True
+
+        # 如果启动失败，返回False（停止控制循环）
+        if current_state == "failed":
+            print("[AutoControl] ERROR: Pump startup failed - stopping auto control")
+            self.stop_auto_control()
+            return False
+
+        # 检查超时（30秒超时）
+        if time.time() - self._pump_startup_start_time > 30:
+            print("[AutoControl] ERROR: Pump startup timeout - stopping auto control")
+            with self._pump_startup_lock:
+                self._pump_startup_state = "failed"
+            self.stop_auto_control()
+            return False
+
+        # 执行启动检查逻辑
+        return self._execute_pump_startup_sequence()
+
+    def _execute_pump_startup_sequence(self) -> bool:
+        """
+        执行水泵启动序列
+        """
+        with self._pump_startup_lock:
+            current_state = self._pump_startup_state
+
+        # 状态1: checking - 检查水泵当前状态
+        if current_state == "checking":
+            return self._check_initial_pump_state()
+
+        # 状态2: starting - 监测启动条件
+        elif current_state == "starting":
+            return self._monitor_pump_startup()
+
+        # 其他状态返回False
+        return False
+
+    def _check_initial_pump_state(self) -> bool:
+        """
+        检查水泵初始状态
+        """
+        try:
+            # 读取第一个水泵的占空比作为代表（所有水泵批量控制，状态相同）
+            pump_duty = processed_reg_map.get_register(PUMP_DUTY_READ_START)
+
+            # 如果占空比 > 5%，说明水泵已经启动
+            if pump_duty > 500:  # 500 = 5%
+                # 检查是否满足启动条件
+                if self._check_pump_conditions():
+                    # print("[AutoControl] INFO: Pump already running with duty > 5% - starting PID immediately")
+                    with self._pump_startup_lock:
+                        self._pump_startup_state = "ready"
+                    return True
+                else:
+                    # print("[AutoControl] INFO: Pump duty > 5% but conditions not met - continuing startup check")
+                    with self._pump_startup_lock:
+                        self._pump_startup_state = "starting"
+                    return False
+
+            # 如果占空比 <= 5%，设置最低占空比
+            else:
+                # print("[AutoControl] INFO: Pump duty <= 5% - setting minimum duty cycle (5%)")
+                # 批量写入所有水泵最低占空比
+                success = batch_write_pump_duty(1000, force=True)  # 1000 = 10%
+                if success:
+                    with self._pump_startup_lock:
+                        self._pump_startup_state = "starting"
+                        self._initial_pump_duty_set = True
+                    # print("[AutoControl] INFO: Minimum pump duty (10%) set successfully")
+                else:
+                    print("[AutoControl] ERROR: Failed to set minimum pump duty")
+                return False
+
+        except Exception as e:
+            print(f"[AutoControl] ERROR: Error checking initial pump state: {e}")
+            return False
+
+    def _monitor_pump_startup(self) -> bool:
+        """
+        监测水泵启动过程
+        """
+        try:
+            # 检查启动条件
+            conditions_met = self._check_pump_conditions()
+
+            if conditions_met:
+                current_time = time.time()
+                with self._pump_startup_lock:
+                    # 第一次满足条件，记录时间
+                    if self._pump_startup_conditions_met_time == 0:
+                        self._pump_startup_conditions_met_time = current_time
+                        # print("[AutoControl] INFO: Pump startup conditions met - starting 2s delay")
+                        return False
+
+                    # 检查是否已经满足条件4秒
+                    elif current_time - self._pump_startup_conditions_met_time >= 4:
+                        self._pump_startup_state = "ready"
+                        # print("[AutoControl] INFO: Pump startup completed - starting PID control")
+                        return True
+                    else:
+                        # 还在等待4秒延时
+                        remaining = 4 - (current_time - self._pump_startup_conditions_met_time)
+                        # print(f"[AutoControl] DEBUG: Waiting {remaining:.1f}s before PID start")
+                        return False
+            else:
+                # 条件不满足，重置计时器
+                with self._pump_startup_lock:
+                    self._pump_startup_conditions_met_time = 0
+                return False
+
+        except Exception as e:
+            print(f"[AutoControl] ERROR: Error monitoring pump startup: {e}")
+            return False
+
+    def _check_pump_conditions(self) -> bool:
+        """
+        检查水泵启动条件
+        返回True如果所有水泵都满足条件
+        """
+        try:
+            # 检查所有水泵的电流和转速
+            all_conditions_met = True
+
+            for i in range(self.pump_count):
+                # 读取电流（转换为实际值）
+                current_addr = PUMP_CURRENT_START + i
+                current_raw = processed_reg_map.get_register(current_addr)
+                # 将U16转换为有符号整数
+                if current_raw >= 0x8000:
+                    current_raw -= 0x10000
+                current_actual = current_raw  # 根据实际情况可能需要转换
+
+                # 读取转速
+                speed_addr = PUMP_SPEED_START + i
+                speed = processed_reg_map.get_register(speed_addr)
+
+                # print(f"[AutoControl] DEBUG: Pump {i} - current raw: {current_raw}, actual: {current_actual}, speed: {speed}")
+
+                # 检查条件：电流 > 0.1A (100) 且转速 > 500 RPM  【120kw的水泵低电流极不稳定，因此排除该判定项，只使用转速判定】
+                # current_ok = current_actual > 100
+                speed_ok = speed > 500
+
+                if not speed_ok:
+                    all_conditions_met = False
+                    # print(f"[AutoControl] DEBUG: Pump {i} conditions - current: {current_actual}A (need >10), speed: {speed}RPM (need >500)")
+                    break
+
+            return all_conditions_met
+
+        except Exception as e:
+            print(f"[AutoControl] ERROR: Error checking pump conditions: {e}")
+            return False
 
     def _flow_only_control(self) -> bool:
-        """模式3: 流量模式 - 返回是否应该继续执行"""
+        """模式3: 流量模式"""
         try:
             # 在每个步骤前检查退出条件
             if not self._should_continue():
@@ -238,8 +477,8 @@ class AutoControlManager:
                 is_add=True  # 正向控制：流量低于目标时增加占空比
             )
 
-            # 限制占空比范围（0-10000对应0%-100%）
-            new_pump_duty = max(0, min(10000, new_pump_duty))
+            # 限制占空比范围（0-100对应0%-100%）
+            new_pump_duty = max(0, min(100, new_pump_duty))
 
             # 更新上一次占空比
             self.last_pump_duty = new_pump_duty
@@ -258,7 +497,7 @@ class AutoControlManager:
             return True  # 错误时继续执行
 
     def _flow_temp_control(self) -> bool:
-        """模式2: 流量温度模式 - 返回是否应该继续执行"""
+        """模式2: 流量温度模式"""
         try:
             # 在每个步骤前检查退出条件
             if not self._should_continue():
@@ -289,7 +528,7 @@ class AutoControlManager:
                 last_set_var=self.last_pump_duty,
                 is_add=True  # 正向控制
             )
-            new_pump_duty = max(0, min(10000, new_pump_duty))
+            new_pump_duty = max(0, min(100, new_pump_duty))
             self.last_pump_duty = new_pump_duty
 
             # 温度PID计算（比例阀控制）
@@ -299,7 +538,7 @@ class AutoControlManager:
                 last_set_var=self.last_pv_duty,
                 is_add=False  # 反向控制：温度高于目标时增加比例阀开度
             )
-            new_pv_duty = max(0, min(10000, new_pv_duty))
+            new_pv_duty = max(0, min(100, new_pv_duty))
             self.last_pv_duty = new_pv_duty
 
             # 在写入前再次检查退出条件
@@ -317,7 +556,7 @@ class AutoControlManager:
             return True  # 错误时继续执行
 
     def _pressure_temp_control(self) -> bool:
-        """模式4: 压差温度模式 - 返回是否应该继续执行"""
+        """模式4: 压差温度模式"""
         try:
             # 在每个步骤前检查退出条件
             if not self._should_continue():
@@ -351,7 +590,7 @@ class AutoControlManager:
                 last_set_var=self.last_pump_duty,
                 is_add=True  # 正向控制：压差低于目标时增加占空比
             )
-            new_pump_duty = max(0, min(10000, new_pump_duty))
+            new_pump_duty = max(0, min(100, new_pump_duty))
             self.last_pump_duty = new_pump_duty
 
             # 温度PID计算（比例阀控制）
@@ -361,7 +600,7 @@ class AutoControlManager:
                 last_set_var=self.last_pv_duty,
                 is_add=False  # 反向控制
             )
-            new_pv_duty = max(0, min(10000, new_pv_duty))
+            new_pv_duty = max(0, min(100, new_pv_duty))
             self.last_pv_duty = new_pv_duty
 
             # 在写入前再次检查退出条件
@@ -380,8 +619,7 @@ class AutoControlManager:
 
     def _apply_pump_duty(self, duty: int):
         """
-        应用水泵占空比到所有水泵（批量写入）
-        添加状态检查，确保在有效状态下执行写入
+        应用水泵占空比到所有水泵，确保在有效状态下执行写入
         """
         try:
             # 检查是否应该执行写入
@@ -389,7 +627,6 @@ class AutoControlManager:
                 print(f"[AutoControl] DEBUG: Skip pump duty write - stop requested")
                 return
 
-            # 使用批量写入函数，为所有水泵设置相同的占空比
             success = batch_write_pump_duty(duty * 100, force=False)
 
         except Exception as e:
@@ -397,8 +634,7 @@ class AutoControlManager:
 
     def _apply_pv_duty(self, duty: int):
         """
-        应用比例阀占空比
-        添加状态检查，确保在有效状态下执行写入
+        应用比例阀占空比，确保在有效状态下执行写入
         """
         try:
             # 检查是否应该执行写入
@@ -406,13 +642,11 @@ class AutoControlManager:
                 print(f"[AutoControl] DEBUG: Skip PV duty write - stop requested")
                 return
 
-            # 写入比例阀占空比
-            success = write_pv_duty(0, duty * 100, force=False)
+            success = batch_write_pv_duty(duty * 100, force=False)
 
         except Exception as e:
             print(f"[AutoControl] ERROR: Apply PV duty error: {e}")
 
-# 全局自动控制管理器实例
 auto_control_manager = AutoControlManager()
 
 def initialize_auto_control():

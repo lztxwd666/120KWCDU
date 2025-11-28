@@ -189,7 +189,7 @@ class PidHelper:
 
         # 7. 存储误差用于下一周期微分计算
         self.previous_error = error
-        print(f"[PidHelper] DEBUG: P={proportional:.3f}, I={integral_term:.3f}, D={derivative_term:.3f}, Output={output:.3f}, Target={target_value}, Measured={measured_value}")
+        # print(f"[PidHelper] DEBUG: P={proportional:.3f}, I={integral_term:.3f}, D={derivative_term:.3f}, Output={output:.3f}, Target={target_value}, Measured={measured_value}")
         return output
 
     def reset(self):

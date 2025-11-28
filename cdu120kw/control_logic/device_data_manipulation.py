@@ -2,6 +2,7 @@
 处理原始寄存器数据，进行状态判定和数据转换，所有参数均从配置文件读取
 """
 
+import inspect
 import json
 import os
 import threading
@@ -1101,7 +1102,7 @@ def get_pressure_diff(reg_map=None):
 def get_cooling_capacity(reg_map=None):
     """
     制冷量计算逻辑:
-    公式: cap_val = F2 * (T4 - T3) * density * specific_heat_capacity / 60
+    公式: cap_val = F2 * (T3 - T4) * density * specific_heat_capacity / 60
       - F2: 处理后流量寄存器 FLOW_VALUE_START + 1（需除以 10**F2小数位 得到物理量）
       - T3: TEMP_VALUE_START + 2（存储为 *1000 的整数，需 /1000 还原）
       - T4: TEMP_VALUE_START + 3（同上）
@@ -1145,7 +1146,7 @@ def get_cooling_capacity(reg_map=None):
     t3 = t3_int / 10.0
     t4 = t4_int / 10.0
 
-    delta_t = t4 - t3
+    delta_t = t3 - t4
 
     # ΔT 为 0 直接屏蔽本次输出
     if abs(delta_t) < 1e-12:
@@ -1199,7 +1200,7 @@ def get_all_proportional_valve_states(reg_map) -> list:
         for i, pv in enumerate(pvs)
     ]
 
-# 传感器寄存器值获取(温度、压力、流量、PH)
+# 传感器寄存器值获取(温度、压力、流量、PH， 温湿度传感器)
 def get_all_sensor_states(reg_map) -> list:
     sensors = CONFIG_CACHE.get("sensor", [])
     now = time.time()
@@ -1688,6 +1689,31 @@ def hmi_write_trigger(address: int, value: int):
     # 写使能关闭时直接拒绝其他写入（批量控制也受此限制）
     if write_enable != 1:
         return
+
+    # 获取当前控制模式
+    control_mode = processed_reg_map.get_register(CONTROL_MODE)
+
+    # 自动控制模式时拒绝手动控制水泵
+    if control_mode in [2, 3, 4]:  # 2=流量温度模式, 3=流量模式, 4=压差温度模式
+        # 检查调用栈，确定是否来自自动控制模块
+        stack = inspect.stack()
+        is_auto_control = any(
+            'auto_control' in frame.filename.lower() or
+            'AutoControlManager' in str(frame.frame.f_locals.get('self', ''))
+            for frame in stack
+        )
+
+        # 如果不是自动控制系统发起的写入，则拒绝水泵控制
+        if not is_auto_control:
+            # 水泵占空比写入区
+            if PUMP_DUTY_WRITE_START <= address < PUMP_DUTY_WRITE_END:
+                # print(f"[ControlLogic] WARNING: Manual pump control rejected in auto mode {control_mode}")
+                return
+
+            # 水泵批量占空比写入寄存器
+            if address == PUMP_BATCH_DUTY_REGISTER:
+                # print(f"[ControlLogic] WARNING: Manual batch pump control rejected in auto mode {control_mode}")
+                return
 
     # 风扇开关写入区
     if COIL_FAN_SWITCH_WRITE_START <= address < COIL_FAN_SWITCH_WRITE_END:

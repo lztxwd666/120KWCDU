@@ -31,7 +31,7 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
         """
         建立TCP连接，支持动态配置IP和端口
         连接失败时不抛异常，返回False，由调用方决定后续动作
-        连接成功后重置重连状态
+        更短的超时与重试次数，降低阻塞时长
         """
         if ip:
             self.ip = ip
@@ -46,7 +46,8 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
                         self.client.close()
                     except (ConnectionError, OSError) as e:
                         print(f"[ModbusTCPConnection] ERROR: Error closing old connection: {e}")
-                self.client = ModbusTcpClient(host=self.ip, port=self.port, retries=3)
+                # 加快失败返回
+                self.client = ModbusTcpClient(host=self.ip, port=self.port, retries=0, timeout=0.3)
                 if self.client.connect():
                     self.connected = True
                     self.auto_reconnect = True
@@ -58,16 +59,10 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
                     self.client = None
                     self.connected = False
                     self._reconnect_attempts += 1
-                    # 只在第一次断开时输出断开日志
                     if not self._has_logged_disconnect:
                         print("[ModbusTCPConnection] WARNING: TCP connection lost, start reconnecting...")
                         self._has_logged_disconnect = True
-            except (
-                    ConnectionRefusedError,
-                    TimeoutError,
-                    socket.gaierror,
-                    pymodbus.exceptions.ModbusException,
-            ) as e:
+            except (ConnectionRefusedError, TimeoutError, socket.gaierror, pymodbus.exceptions.ModbusException) as e:
                 print(f"[ModbusTCPConnection] ERROR: TCP connection exception: {str(e)}")
                 self.client = None
                 self.connected = False
@@ -108,8 +103,9 @@ class ModbusTCPConnectionManager(ModbusConnectionManagerBase):
 def safe_modbustcp_call(manager, func, *args, **kwargs):
     """
     TCP安全调用，统一异常处理和重试机制
+    失败后立即关闭并标记断开，加快上层切换判断
     """
-    max_retries = 2
+    max_retries = 1  # 降低内部重试次数，加速失败返回
     for attempt in range(max_retries):
         client = manager.get_client()
         if not client:
@@ -117,19 +113,15 @@ def safe_modbustcp_call(manager, func, *args, **kwargs):
             return None
         try:
             return func(client, *args, **kwargs)
-        except (
-            ConnectionResetError,
-            pymodbus.exceptions.ModbusException,
-            OSError,
-        ) as e:
+        except (ConnectionResetError, pymodbus.exceptions.ModbusException, OSError) as e:
             print(f"[ModbusTCPConnection] WARNING: TCP operation failed {attempt + 1}/{max_retries}): {str(e)}")
             with manager.connection_lock:
                 try:
                     client.close()
-                except (ConnectionError, OSError) as e:
-                    print(f"[ModbusTCPConnection] WARNING: Error closing TCP connection: {e}")
+                except (ConnectionError, OSError) as e2:
+                    print(f"[ModbusTCPConnection] WARNING: Error closing TCP connection: {e2}")
                 manager.connected = False
-            time.sleep(0.5)
+            time.sleep(0.1)
         except (ValueError, TypeError) as e:
             print(f"[ModbusTCPConnection] ERROR: TCP parameter error: {str(e)}")
             return None

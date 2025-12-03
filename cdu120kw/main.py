@@ -4,15 +4,16 @@
 """
 
 import atexit
+import logging
 import os
 import signal
 import sys
 import tempfile
 import time
-import logging
 from typing import Optional, TextIO
 
 import portalocker
+
 
 # 配置日志系统，忽略pymodbus库中的特定噪音日志，以减少日志污染
 class IgnorePymodbusNoise(logging.Filter):
@@ -49,13 +50,22 @@ def is_already_running_with_lock():
     如果已经有实例在运行，返回True，否则返回False
     """
     global lock_file_handle
-    lock_filename = os.path.join(tempfile.gettempdir(), "redfish_v1.lock")
+
+    runtime_dir = os.environ.get(
+        "RUNTIME_DIRECTORY",
+        tempfile.gettempdir()     # systemd 不存在时兜底,基于linux环境设计
+    )
+
+    lock_filename = os.path.join(runtime_dir, "redfish_v1.lock")
+
     try:
         lock_file_handle = open(lock_filename, "w")
-        portalocker.lock(lock_file_handle, portalocker.LOCK_EX | portalocker.LOCK_NB)
+        portalocker.lock(lock_file_handle,
+                         portalocker.LOCK_EX | portalocker.LOCK_NB)
         return False
     except portalocker.exceptions.LockException:
         return True
+
 
 def cleanup_lock_file():
     """
@@ -102,7 +112,7 @@ if __name__ == "__main__":
 
     if is_already_running_with_lock():
         print("[Main] ERROR: The program is already running and cannot open multiple instances。")
-        sys.exit(1)
+        sys.exit(0)
 
     atexit.register(cleanup_lock_file)
     print("[Main] INFO: Application startup in progress...")
@@ -118,7 +128,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         # 这里应该不会被执行，因为信号处理器已经接管了中断
         print("[Main] INFO: Received interrupt signal, clear resources...")
-        if controller:
+        if controller: 
             controller.cleanup()
         sys.exit(0)
 

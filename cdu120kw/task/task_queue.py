@@ -180,15 +180,30 @@ class BasePollingTaskManager:
             self.pause_cond.notify_all()
             self._has_logged_polling_paused = False  # 恢复后允许下次再输出暂停日志
 
+    def on_pause_check(self):
+        """
+        暂停期间的检查钩子，默认不做任何事。
+        子类可覆盖该方法，在暂停时执行连接状态检测与模式切换等逻辑。
+        """
+        pass
+
     def wait_if_paused(self):
         """
-        如果处于暂停状态，则阻塞等待恢复
+        如果处于暂停状态，则阻塞等待恢复。
+        暂停循环中调用 on_pause_check，让子类有机会检测连接变化并主动恢复。
         """
         with self.pause_cond:
             while self.paused:
                 if not self._has_logged_polling_paused:
                     print("[TaskQueue] INFO: Polling paused, waiting for connection recovery...")
                     self._has_logged_polling_paused = True
+                # 在暂停期间，调用钩子让子类执行连接状态检查/模式切换
+                try:
+                    self.on_pause_check()
+                except Exception as e:
+                    # 防止钩子异常导致暂停逻辑崩溃
+                    print(f"[TaskQueue] ERROR: Pause check exception: {e}")
+                # 超时等待一段时间，避免忙等
                 self.pause_cond.wait(timeout=1)
 
     def start(self):

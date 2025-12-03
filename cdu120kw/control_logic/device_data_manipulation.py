@@ -60,6 +60,18 @@ COIL_PUMP_SWITCH_WRITE_END = 128                   # 结束地址：128（排他
 # 水泵批量开关控制线圈：129（单个线圈）
 PUMP_BATCH_SWITCH_COIL = 129                       # 地址：129
 
+# IO输入线圈读取范围：200-231（共32个寄存器）
+COIL_IO_INPUT_READ_START = 200                     # 起始地址：200
+COIL_IO_INPUT_READ_END = 232                       # 结束地址：232（排他性，实际范围200-231）
+
+# IO输出线圈读取范围：233-265（共32个寄存器）
+COIL_IO_OUTPUT_READ_START = 233                    # 起始地址：233
+COIL_IO_OUTPUT_READ_END = 265                      # 结束地址：265（排他性，实际范围233-264）
+
+# IO输出线圈写入范围：266-295（共32个寄存器）
+COIL_IO_OUTPUT_WRITE_START = 266                   # 起始地址：266
+COIL_IO_OUTPUT_WRITE_END = 298                     # 结束地址：297（排他性，实际范围266-297）
+
 
 # 保持寄存器（Holding Registers）规划 - 基于排他性结束地址计算
 
@@ -336,6 +348,8 @@ class ProcessedRegisterMap:
             (FAN_BATCH_SWITCH_COIL, FAN_BATCH_SWITCH_COIL + 1),
             # 水泵批量开关控制线圈
             (PUMP_BATCH_SWITCH_COIL, PUMP_BATCH_SWITCH_COIL + 1),
+            # IO输出线圈写入范围
+            (COIL_IO_OUTPUT_WRITE_START, COIL_IO_OUTPUT_WRITE_END),
             # 写入使能线圈
             (COIL_WRITE_ENABLE, COIL_WRITE_ENABLE + 1),
         ]
@@ -584,6 +598,7 @@ def process_fan_state(
         "speed": speed,
         "state": state,
     }
+
 def process_pump_state(
         pump_cfg: dict,
         registers: dict,
@@ -1294,6 +1309,15 @@ def _sync_read_to_write_registers_once():
             processed_reg_map.set_coil(write_addr, read_value, trigger_callback=False)
             # print(f"[ControlLogic] DEBUG: Sync pump switch - pump_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
 
+        # 同步IO output：读取线圈233-265 -> 写入线圈266-297
+        iooutput_count = len(CONFIG_CACHE.get("output", []))
+        for i in range(iooutput_count):
+            read_addr = COIL_IO_OUTPUT_READ_START + i
+            write_addr = COIL_IO_OUTPUT_WRITE_START + i
+            read_value = processed_reg_map.get_coil(read_addr)
+            processed_reg_map.set_coil(write_addr, read_value, trigger_callback=False)
+            # print(f"[ControlLogic] DEBUG: Sync fan switch - iooutput_index={i}, read_addr={read_addr}(value={read_value}) -> write_addr={write_addr}")
+
         # print("[ControlLogic] INFO: First sync completed - all read to write registers synchronized")
 
     except Exception as e:
@@ -1407,8 +1431,9 @@ def apply_write_enable_effect(enable: int):
         # 停止水泵和比例阀
         for i in range(len(pumps)):
             write_pump_duty(i, 0, force=True)
-        for i in range(len(pvs)):
-            write_pv_duty(i, 0, force=True)
+
+        # for i in range(len(pvs)):
+        #     write_pv_duty(i, 0, force=True)
 
         # 创建/替换风扇延迟关停定时器
         def delayed_shutdown():
@@ -1671,6 +1696,60 @@ def batch_write_pv_duty(duty: int, slave: int = 1, priority: int = 0, force: boo
 # 比例阀初始化重入保护标志
 batch_write_pv_duty._executing = False
 
+# IO Output输出线圈写入函数
+def write_io_output(iooutput_index: int, switch_on: int, slave: int = 1, priority: int = 0, force: bool = False):
+    """
+    写入IO Output输出（线圈）到本地寄存器表，并同步写入到PCBA实际寄存器
+    1. 先判断写入使能寄存器（COIL_WRITE_ENABLE）是否为1，若为0则禁止写入
+    2. 写入本地寄存器表（COIL_IO_OUTPUT_WRITE_START + iooutput_index）
+    3. 查找iooutput配置，获取可写线圈字段
+    4. 调用ComponentOperationTaskManager写入PCBA
+    """
+
+    from cdu120kw.service_function.controller_app import app_controller
+    component_task_mgr = app_controller.component_task_manager
+
+    # 步骤1：判断写入使能，延迟关停风扇时允许强制写入
+    if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
+        print("[ControlLogic] WARNING: IO Output write denied: write enable=0")
+        return False
+
+    # # 步骤2：写入本地寄存器
+    # coil_addr = COIL_IO_OUTPUT_WRITE_START + iooutput_index
+    # processed_reg_map.set_coil(coil_addr, switch_on)
+    # print(f"[ControlLogic] INFO: Local IO Output written: addr={coil_addr}, value={switch_on}")
+
+    # 步骤3：查找IO Output配置
+    iooutput_list = CONFIG_CACHE.get("output", [])
+    if iooutput_index >= len(iooutput_list):
+        print(f"[ControlLogic] WARNING: IO Output index {iooutput_index} out of range")
+        return False
+    iooutput_name = iooutput_list[iooutput_index]["name"]
+
+    param = component_task_mgr.param_mgr.get_param(iooutput_name)
+    if not param:
+        print(f"[ControlLogic] WARNING: IO Output config not found: {iooutput_name}")
+        return False
+
+    field = None
+    for k, v in param.writable_fields.items():
+        if v[0] == "coil":
+            field = k
+            break
+    if not field:
+        print(f"[ControlLogic] WARNING: No writable coil field for IO Output: {iooutput_name}")
+        return False
+
+    # 步骤4：写入PCBA
+    result = component_task_mgr.operate_component(
+        name=iooutput_name,
+        value_dict={field: int(switch_on)},
+        slave=slave,
+        priority=priority
+    )
+    # print(f"[ControlLogic] INFO: IO Output submit (force={force}): {iooutput_name}={switch_on}, result={result}")
+    return result
+
 # HMI写入触发回调函数
 def hmi_write_trigger(address: int, value: int):
     """
@@ -1750,6 +1829,13 @@ def hmi_write_trigger(address: int, value: int):
         # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
         return
 
+    # IO Output写入区
+    if COIL_IO_OUTPUT_WRITE_START <= address < COIL_IO_OUTPUT_WRITE_END:
+        iooutput_index = address - COIL_IO_OUTPUT_WRITE_START
+        write_io_output(iooutput_index, value)
+        # print("[ControlLogic] INFO: IO Output: idx=%s addr=%s value=%s",
+        #             iooutput_index, address, int(value))
+        return
 
 # 注册写入回调
 processed_reg_map.write_coil_callback(hmi_write_trigger)

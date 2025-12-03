@@ -243,10 +243,10 @@
         "offset1": -4000,
         "offset2": 0,
         "gain1": 0.001,
-        "gain2": 37.1875,
+        "gain2": 9.375,
         "gain3": 1.0,
-        "min_pressure": 5,
-        "max_pressure": 600
+        "min_pressure": 0,
+        "max_pressure": 150
       }
     },
     {
@@ -261,10 +261,10 @@
         "offset1": -4000,
         "offset2": 0,
         "gain1": 0.001,
-        "gain2": 37.1875,
+        "gain2": 9.375,
         "gain3": 1.0,
-        "min_pressure": 5,
-        "max_pressure": 600
+        "min_pressure": 0,
+        "max_pressure": 150
       }
     },
     {
@@ -279,10 +279,10 @@
         "offset1": -4000,
         "offset2": 0,
         "gain1": 0.001,
-        "gain2": 37.1875,
+        "gain2": 9.375,
         "gain3": 1.0,
-        "min_pressure": 5,
-        "max_pressure": 600
+        "min_pressure": 0,
+        "max_pressure": 150
       }
     },
     {
@@ -297,10 +297,10 @@
         "offset1": -4000,
         "offset2": 0,
         "gain1": 0.001,
-        "gain2": 37.1875,
+        "gain2": 9.375,
         "gain3": 1.0,
-        "min_pressure": 5,
-        "max_pressure": 600
+        "min_pressure": 0,
+        "max_pressure": 150
       }
     },
     {
@@ -481,6 +481,110 @@
         "gain3": 1.0,
         "min_pht": 0,
         "max_pht": 60
+      }
+    }
+  ],
+  "input": [
+    {
+      "name": "X0",
+      "config": {
+        "name": "X0",
+        "r_b_input_address": {
+          "local": 0,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X1",
+      "config": {
+        "name": "X1",
+        "r_b_input_address": {
+          "local": 1,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X2",
+      "config": {
+        "name": "X2",
+        "r_b_input_address": {
+          "local": 2,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "X3",
+      "config": {
+        "name": "X3",
+        "r_b_input_address": {
+          "local": 3,
+          "remote": 0
+        }
+      }
+    }
+  ],
+  "output": [
+    {
+      "name": "Y0",
+      "config": {
+        "name": "Y0",
+        "rw_b_output_address": {
+          "local": 768,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y1",
+      "config": {
+        "name": "Y1",
+        "rw_b_output_address": {
+          "local": 769,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y2",
+      "config": {
+        "name": "Y2",
+        "rw_b_output_address": {
+          "local": 770,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y3",
+      "config": {
+        "name": "Y3",
+        "rw_b_output_address": {
+          "local": 771,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y4",
+      "config": {
+        "name": "Y4",
+        "rw_b_output_address": {
+          "local": 772,
+          "remote": 0
+        }
+      }
+    },
+    {
+      "name": "Y5",
+      "config": {
+        "name": "Y5",
+        "rw_b_output_address": {
+          "local": 773,
+          "remote": 0
+        }
       }
     }
   ]

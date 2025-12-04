@@ -246,7 +246,7 @@
         "gain2": 9.375,
         "gain3": 1.0,
         "min_pressure": 0,
-        "max_pressure": 150
+        "max_pressure": 70
       }
     },
     {
@@ -264,7 +264,7 @@
         "gain2": 9.375,
         "gain3": 1.0,
         "min_pressure": 0,
-        "max_pressure": 150
+        "max_pressure": 70
       }
     },
     {
@@ -282,7 +282,7 @@
         "gain2": 9.375,
         "gain3": 1.0,
         "min_pressure": 0,
-        "max_pressure": 150
+        "max_pressure": 70
       }
     },
     {
@@ -300,7 +300,7 @@
         "gain2": 9.375,
         "gain3": 1.0,
         "min_pressure": 0,
-        "max_pressure": 150
+        "max_pressure": 70
       }
     },
     {
@@ -318,7 +318,7 @@
         "gain2": 18.6875,
         "gain3": 1.0,
         "min_flow": 1,
-        "max_flow": 300
+        "max_flow": 130
       }
     },
     {
@@ -336,7 +336,7 @@
         "gain2": 18.6875,
         "gain3": 1.0,
         "min_flow": 1,
-        "max_flow": 300
+        "max_flow": 130
       }
     },
     {
@@ -390,7 +390,7 @@
         "gain2": 1.0,
         "gain3": 1.0,
         "min_pht": 0,
-        "max_pht": 60
+        "max_pht": 100
       }
     },
     {
@@ -407,8 +407,8 @@
         "gain1": 1.0,
         "gain2": 1.0,
         "gain3": 1.0,
-        "min_pht": 0,
-        "max_pht": 60
+        "min_pht": -20,
+        "max_pht": 50
       }
     },
     {

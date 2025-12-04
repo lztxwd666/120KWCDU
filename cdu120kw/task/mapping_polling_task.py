@@ -5,9 +5,11 @@
 import json
 import threading
 import time
+import os
 
 from cdu120kw.modbus_manager.batch_reader import ModbusBatchReader
 from cdu120kw.task.task_queue import BasePollingTaskManager
+from cdu120kw.config.config_repository import ConfigRepository
 
 
 class CommunicationTask:
@@ -212,25 +214,16 @@ class MappingPollingTaskManager(BasePollingTaskManager):
         self.update_mode()
 
     def load_tasks(self, config_path):
-        """
-        从配置文件加载任务
-        """
         try:
-            with open(config_path, "r", encoding="utf-8-sig") as f:
-                config = json.load(f)
-            tasks = config.get("tasks", [])
+            repo = ConfigRepository.load(config_path)
+            tasks = repo.tasks
             if not tasks:
                 print("[MappingPollingTask] WARNING: No communication task found in config")
                 return
             for task_params in tasks:
                 comm_task = CommunicationTask(task_params)
                 priority = 10 - comm_task.level
-                self.task_queue.put_task(
-                    func=self.execute_task,
-                    args=(comm_task,),
-                    kwargs=None,
-                    priority=priority,
-                )
+                self.task_queue.put_task(func=self.execute_task, args=(comm_task,), kwargs=None, priority=priority)
             print(f"[MappingPollingTask] INFO: Loaded {len(tasks)} communication task")
         except Exception as e:
             print(f"[MappingPollingTask] ERROR: Failed to load task configuration: {e}")

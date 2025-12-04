@@ -184,7 +184,7 @@ class AutoControlManager:
             name="AutoControl"
         )
         self.control_thread.start()
-        print(f"[AutoControl] INFO: Auto control started for mode {control_mode} with {self.pump_count} pumps")
+        # print(f"[AutoControl] INFO: Auto control started for mode {control_mode} with {self.pump_count} pumps")
 
 
     def stop_auto_control(self):
@@ -211,12 +211,12 @@ class AutoControlManager:
                 # 不设置为None，避免线程泄露
                 # 让线程自然结束或在下一次启动时处理
 
-        print(f"[AutoControl] INFO: Auto control stopped")
+        # print(f"[AutoControl] INFO: Auto control stopped")
 
 
     def _auto_control_loop(self):
         """自动控制主循环"""
-        print("[AutoControl] DEBUG: Auto control loop started")
+        # print("[AutoControl] DEBUG: Auto control loop started")
 
         loop_count = 0
         while self._should_continue():
@@ -283,7 +283,7 @@ class AutoControlManager:
                         break
                     time.sleep(chunk_size)
 
-        print("[AutoControl] DEBUG: Auto control loop ended")
+        # print("[AutoControl] DEBUG: Auto control loop ended")
 
 
     def _check_pump_startup_state(self) -> bool:

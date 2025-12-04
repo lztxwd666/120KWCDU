@@ -7,18 +7,18 @@
 - 支持全局配置缓存（单路径只加载与预处理一次）
 """
 
-
-import json
 import os
 import threading
 import time
 from typing import Dict, Tuple, Optional
 
+from cdu120kw.config.config_repository import (
+    ConfigRepository,
+    ComponentTaskParamManager,
+    ComponentTaskParam,
+)
 from cdu120kw.modbus_manager.batch_writer import ModbusBatchWriter
 from cdu120kw.task.task_queue import BasePollingTaskManager
-
-# 全局配置缓存（单路径只加载与预处理一次）
-_CONFIG_FILE_CACHE: Dict[str, "ComponentTaskParamManager"] = {}
 
 
 def to_u16(value: int) -> int:
@@ -30,116 +30,6 @@ def to_u16(value: int) -> int:
     except (ValueError, TypeError):
         iv = 0
     return iv & 0xFFFF
-
-
-def _pick_range_from_config(cfg: dict, key: str) -> Tuple[Optional[int], Optional[int]]:
-    """
-    自适配多种常见命名，提取占空比范围（寄存器原始值范围）
-    优先匹配与当前key同前缀的 *_min/*_max，其次通用 min/max、min_duty/max_duty 等
-    """
-    # key 形如 rw_d_duty_register_address / rw_d_speed_register_address ...
-    base = key.rsplit("_address", 1)[0]
-    candidates = [
-        (f"{base}_min", f"{base}_max"),
-        ("min_duty", "max_duty"),
-        ("duty_min", "duty_max"),
-        ("min", "max"),
-    ]
-    for min_k, max_k in candidates:
-        mn = cfg.get(min_k, None)
-        mx = cfg.get(max_k, None)
-        if mn is not None or mx is not None:
-            try:
-                mn_i = int(mn) if mn is not None else None
-                mx_i = int(mx) if mx is not None else None
-                return mn_i, mx_i
-            except (ValueError, TypeError):
-                return None, None
-    return None, None
-
-class ComponentTaskParam:
-    """
-    组件任务参数对象（含可写字段预映射）
-    - writable_fields: { field_name: (write_type, address, decimals, (min,max)) }
-      write_type: "coil"/"register"
-    """
-
-    def __init__(self, name: str, config: dict, comp_type: str = "fan"):
-        self.name = name
-        self.comp_type = comp_type
-        self.config = config
-        self.enabled = config.get("enabled", True)
-        self.writable_fields: Dict[str, Tuple[str, int, int, Tuple[Optional[int], Optional[int]]]] = {}
-        self._precompute_writable_fields()
-
-    def _precompute_writable_fields(self):
-        for k, v in self.config.items():
-            if not isinstance(v, dict):
-                continue
-            if not k.endswith("address"):
-                continue
-            if k.startswith("rw_b"):
-                # 可写线圈
-                if "local" in v:
-                    addr = v["local"]
-                    self.writable_fields[k] = ("coil", int(addr), 0, (None, None))
-            elif k.startswith("rw_d"):
-                # 可写保持寄存器
-                if "local" in v:
-                    addr = v["local"]
-                    decimals_key = k.replace("address", "decimals")
-                    decimals = int(self.config.get(decimals_key, 0) or 0)
-                    rng = _pick_range_from_config(self.config, k)
-                    self.writable_fields[k] = ("register", int(addr), decimals, rng)
-
-    def get(self, key, default=None):
-        return self.config.get(key, default)
-
-class ComponentTaskParamManager:
-    """
-    组件参数管理器（带可写字段预映射），支持全局缓存
-    """
-
-    def __init__(self, config_path: str):
-        self.lock = threading.Lock()
-        self.params: Dict[str, ComponentTaskParam] = {}
-        self._load_config(config_path)
-
-    def _load_config(self, config_path: str):
-        with open(config_path, "r", encoding="utf-8-sig") as f:
-            config = json.load(f)
-
-        def _add_all(kind_key: str, comp_type: str):
-            for item in config.get(kind_key, []):
-                name = item["name"]
-                comp_config = item["config"]
-                self.params[name] = ComponentTaskParam(name, comp_config, comp_type)
-
-        _add_all("fans", "fan")
-        _add_all("pumps", "pump")
-        # 兼容单复数两种写法
-        if "proportional_valves" in config:
-            _add_all("proportional_valves", "proportional_valve")
-        if "proportional_valve" in config:
-            _add_all("proportional_valve", "proportional_valve")
-
-    def get_param(self, name: str) -> Optional[ComponentTaskParam]:
-        with self.lock:
-            return self.params.get(name)
-
-    def set_enabled(self, name: str, enabled: bool):
-        with self.lock:
-            if name in self.params:
-                self.params[name].enabled = enabled
-                self.params[name].config["enabled"] = enabled
-
-    def is_enabled(self, name: str) -> bool:
-        with self.lock:
-            return bool(self.params.get(name) and self.params[name].enabled)
-
-    def all_params(self):
-        with self.lock:
-            return list(self.params.values())
 
 class ComponentOperationTaskManager(BasePollingTaskManager):
     """
@@ -153,7 +43,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
         self,
         tcp_manager,
         config_path: str,
-        mapping_task_manager=None,  # 可为空：写入不再依赖映射
+        mapping_task_manager=None,
         pool_workers=2,
         rtu_manager=None,
         tcp_reconnect_mgr=None,
@@ -164,60 +54,100 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
         self.rtu_manager = rtu_manager
         self.tcp_writer = ModbusBatchWriter(self.tcp_manager)
         self.rtu_writer = ModbusBatchWriter(self.rtu_manager) if self.rtu_manager else None
-        self.current_mode = "tcp"
+        self.current_mode = "none"  # 启动由update_mode判定
         self.param_mgr: Optional[ComponentTaskParamManager] = None
         self.lock = threading.Lock()
         self.tcp_reconnect_mgr = tcp_reconnect_mgr
         self.rtu_reconnect_mgr = rtu_reconnect_mgr
         self.config_path = config_path
-        self.mapping_task_manager = mapping_task_manager  # 仅为兼容旧读接口
-        self.accept_new_task = True
-        self.last_write_values: Dict[Tuple[str, int], int] = {}
+        self.mapping_task_manager = mapping_task_manager
+        self.accept_new_task = False
+        self.last_write_values: Dict[Tuple[str, int, int, str], int] = {}
+        self._mode_watchdog_thread = None
+        self._mode_watchdog_stop = threading.Event()
 
         if config_path and os.path.exists(config_path):
             self.load_tasks(config_path)
 
+        # 初始化后立刻判定模式并启动监控线程
+        self.update_mode()
+        self._start_mode_watchdog()
+
     def load_tasks(self, config_path: str):
-        # 全局缓存：同一路径仅加载预处理一次
-        mgr = _CONFIG_FILE_CACHE.get(config_path)
-        if mgr is None:
-            mgr = ComponentTaskParamManager(config_path)
-            _CONFIG_FILE_CACHE[config_path] = mgr
-        self.param_mgr = mgr
+        # 使用统一仓库，复用预映射好的组件参数管理器
+        repo = ConfigRepository.load(config_path)
+        self.param_mgr = repo.component_params
         print(f"[ComponentOperationTask] INFO: Loaded component operation task")
+
+    @staticmethod
+    def _pick_first_writable(param: "ComponentTaskParam", value_dict: dict):
+        for field, value in value_dict.items():
+            meta = param.writable_fields.get(field)
+            if meta:
+                write_type, address, decimals, rng = meta
+                return field, write_type, address, decimals, rng, value
+        return None, None, None, None, (None, None), None
+
+    def _start_mode_watchdog(self):
+        """
+        启动模式监视线程
+        监视TCP/RTU连接状态，自动切换写入模式
+        """
+        if self._mode_watchdog_thread and self._mode_watchdog_thread.is_alive():
+            return
+        def _watchdog():
+            while not self._mode_watchdog_stop.is_set():
+                try:
+                    self.update_mode()
+                except Exception as e:
+                    print(f"[ComponentOperationTask] ERROR: Mode watchdog exception: {e}")
+                time.sleep(0.2)
+        self._mode_watchdog_thread = threading.Thread(target=_watchdog, daemon=True)
+        self._mode_watchdog_thread.start()
 
     def update_mode(self):
         with self.lock:
             tcp_ok = self.tcp_manager.is_connected()
             rtu_ok = self.rtu_manager.is_connected() if self.rtu_manager else False
             prev_mode = self.current_mode
+
             if tcp_ok:
                 self.current_mode = "tcp"
                 self.accept_new_task = True
                 self.resume()
             elif rtu_ok:
+                # 从 tcp 切到 rtu 时，强制关闭 TCP 打断可能的阻塞写
+                if prev_mode == "tcp":
+                    with self.tcp_manager.connection_lock:
+                        if getattr(self.tcp_manager, "client", None):
+                            try:
+                                self.tcp_manager.client.close()
+                            except Exception as e:
+                                print(f"[ComponentOperationTask] WARNING: Force close TCP failed: {e}")
+                            self.tcp_manager.connected = False
                 self.current_mode = "rtu"
                 self.accept_new_task = True
                 self.resume()
             else:
+                # 两者都不可用：切到 none 并暂停；若从 tcp 来，亦强制关闭 TCP
+                if prev_mode == "tcp":
+                    with self.tcp_manager.connection_lock:
+                        if getattr(self.tcp_manager, "client", None):
+                            try:
+                                self.tcp_manager.client.close()
+                            except Exception as e:
+                                print(f"[ComponentOperationTask] WARNING: Force close TCP failed: {e}")
+                            self.tcp_manager.connected = False
                 self.current_mode = "none"
                 self.accept_new_task = False
                 self.pause()
+
             if self.current_mode != prev_mode:
                 print(f"[ComponentOperationTask] INFO: Switch hosted mode: {prev_mode} -> {self.current_mode}")
 
-    @staticmethod
-    def _pick_first_writable(param: "ComponentTaskParam", value_dict: dict):
-        """
-        在预映射表中按传入字段匹配第一个可写项
-        返回: (field, write_type, address, decimals, (min,max), value)
-        """
-        for field, value in value_dict.items():
-            meta = param.writable_fields.get(field)
-            if meta:
-                wtype, addr, decimals, rng = meta
-                return field, wtype, addr, decimals, rng, value
-        return None, None, None, None, (None, None), None
+    def on_pause_check(self):
+        # 暂停期间也轮询模式，便于连接恢复后立刻继续写
+        self.update_mode()
 
     def operate_component(self, name: str, value_dict: dict, slave: int = 1, priority: int = 0):
         """
@@ -272,7 +202,7 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
                 write_value = to_u16(ivalue)
 
             # 去重：相同地址与相同值则跳过
-            last_key = (write_type, address)
+            last_key = (write_type, address, int(slave), self.current_mode)
             if self.last_write_values.get(last_key) == write_value:
                 # print(f"[ComponentOperationTask] INFO: Skip write: {name}, type={write_type}, addr={address}, value={write_value}, (Same as last time)")
                 return "Skip write: value not changed"
@@ -386,3 +316,14 @@ class ComponentOperationTaskManager(BasePollingTaskManager):
         address = addr_info["local"]
         value = reg.coils.get(address)
         return value
+
+    def shutdown(self):
+        """
+        优雅关闭：先停监视线程，再关闭队列与工作线程
+        """
+        self._mode_watchdog_stop.set()
+        if self._mode_watchdog_thread:
+            self._mode_watchdog_thread.join(timeout=1.0)
+            if self._mode_watchdog_thread.is_alive():
+                print("[ComponentOperationTask] WARNING: Mode watchdog is still alive after shutdown")
+        super().shutdown()

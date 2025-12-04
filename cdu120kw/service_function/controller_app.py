@@ -8,6 +8,7 @@ from waitress import serve
 
 from cdu120kw.config.config_manager import get_config
 from cdu120kw.control_logic import device_data_manipulation
+from cdu120kw.control_logic.io_control import stop_io_control, start_io_control
 from cdu120kw.modbus_manager.auto_reconnect import (
     TcpAutoReconnectManager,
     RtuAutoReconnectManager,
@@ -148,6 +149,7 @@ class AppController:
             # 初始化自动控制逻辑
             from cdu120kw.control_logic.auto_control import initialize_auto_control
             initialize_auto_control()
+            start_io_control(interval=0.5)
 
             self.start_flask_server()
             self.service_stopped = False
@@ -168,6 +170,7 @@ class AppController:
             self.rtu_reconnect_manager.stop()
             modbustcp_manager.disconnect()
             modbusrtu_manager.disconnect()
+            stop_io_control()
             self.service_stopped = True
         except Exception as e:
             print(f"[AppController] ERROR: Stop service error: {e}")

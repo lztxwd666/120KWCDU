@@ -3,9 +3,9 @@
 继承BasePollingTaskManager，实现低频任务调度
 """
 
-import json
 import time
 
+from cdu120kw.config.config_repository import ConfigRepository
 from cdu120kw.modbus_manager.batch_reader import ModbusBatchReader
 from cdu120kw.task.task_queue import BasePollingTaskManager
 
@@ -54,25 +54,19 @@ class LowFrequencyTaskManager(BasePollingTaskManager):
         if config_path:
             self.load_tasks(config_path)
 
-    def load_tasks(self, config_path):
-        """
-        从配置文件加载低频任务
-        """
+    def load_tasks(self, config_path: str):
         try:
-            with open(config_path, "r", encoding="utf-8-sig") as f:
-                config = json.load(f)
-            for task_params in config.get("low_frequency_tasks", []):
+            repo = ConfigRepository.load(config_path)
+            tasks = list(repo.low_frequency_tasks or [])
+            if not tasks:
+                print("[LowFrequencyTask] WARNING: No low frequency task found in config")
+                return
+            for task_params in tasks:
                 comm_task = LowFrequencyTask(task_params)
                 if comm_task.name == "RTUHeartbeat":
                     self._rtu_heartbeat_task_params = task_params
-                priority = 5
-                self.task_queue.put_task(
-                    func=self.execute_task,
-                    args=(comm_task,),
-                    kwargs=None,
-                    priority=priority,
-                )
-            print(f"[LowFrequencyTask] INFO: Loaded {len(config.get('low_frequency_tasks', []))} low frequency task")
+                self.task_queue.put_task(func=self.execute_task, args=(comm_task,), kwargs=None, priority=5)
+            print(f"[LowFrequencyTask] INFO: Loaded {len(tasks)} low frequency task")
         except Exception as e:
             print(f"[LowFrequencyTask] ERROR: Failed to load low frequency task configuration: {e}")
 

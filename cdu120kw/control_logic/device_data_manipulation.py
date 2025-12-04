@@ -3,11 +3,19 @@
 """
 
 import inspect
-import json
 import os
 import threading
 import time
 from typing import Dict, Any, Optional
+
+from cdu120kw.config.config_repository import ConfigRepository
+
+# 基于当前文件位置构造绝对路径，保证在任意工作目录下都能找到配置
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_PATH = os.path.normpath(os.path.join(_BASE_DIR, "..", "config/cdu_120kw_component.json"))
+
+# 使用集中式仓库加载
+CONFIG_CACHE = ConfigRepository.load(_CONFIG_PATH).to_dict()
 
 # 增加同步线程启动保护标志
 _sync_thread_started = False
@@ -71,6 +79,9 @@ COIL_IO_OUTPUT_READ_END = 265                      # 结束地址：265（排他
 # IO输出线圈写入范围：266-295（共32个寄存器）
 COIL_IO_OUTPUT_WRITE_START = 266                   # 起始地址：266
 COIL_IO_OUTPUT_WRITE_END = 298                     # 结束地址：297（排他性，实际范围266-297）
+
+# IO输出批量写入控制线圈 298 (单个线圈)
+IO_OUTPUT_BATCH_SWITCH_COIL = 298                  # 地址：298
 
 
 # 保持寄存器（Holding Registers）规划 - 基于排他性结束地址计算
@@ -229,18 +240,6 @@ ENVIRONMENT_STATUS_START = ENVIRONMENT_VALUE_END     # 起始地址：1152
 ENVIRONMENT_STATUS_END = ENVIRONMENT_STATUS_START + 16  # 结束地址：1168（排他性，实际范围1144-1167）
 
 
-def _load_config(config_path: str) -> dict:
-    """加载配置文件，支持相对路径"""
-    # 获取当前文件所在目录
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    # 拼接到项目根目录
-    abs_path = os.path.join(base_dir, "..", config_path)
-    abs_path = os.path.normpath(abs_path)
-    with open(abs_path, "r", encoding="utf-8-sig") as f:
-        return json.load(f)
-
-CONFIG_CACHE = _load_config("config/cdu_120kw_component.json")
-
 class ProcessedRegisterMap:
     """
     存储处理后数据的寄存器表，分为线圈(coils)和保持寄存器(registers)
@@ -344,12 +343,14 @@ class ProcessedRegisterMap:
             (COIL_FAN_SWITCH_WRITE_START, COIL_FAN_SWITCH_WRITE_END),
             # 水泵开关写入预留范围
             (COIL_PUMP_SWITCH_WRITE_START, COIL_PUMP_SWITCH_WRITE_END),
+            # IO输出线圈写入范围
+            (COIL_IO_OUTPUT_WRITE_START, COIL_IO_OUTPUT_WRITE_END),
             # 风扇批量开关控制线圈
             (FAN_BATCH_SWITCH_COIL, FAN_BATCH_SWITCH_COIL + 1),
             # 水泵批量开关控制线圈
             (PUMP_BATCH_SWITCH_COIL, PUMP_BATCH_SWITCH_COIL + 1),
-            # IO输出线圈写入范围
-            (COIL_IO_OUTPUT_WRITE_START, COIL_IO_OUTPUT_WRITE_END),
+            # IO输出批量写入控制线圈
+            (IO_OUTPUT_BATCH_SWITCH_COIL, IO_OUTPUT_BATCH_SWITCH_COIL + 1),
             # 写入使能线圈
             (COIL_WRITE_ENABLE, COIL_WRITE_ENABLE + 1),
         ]
@@ -522,6 +523,7 @@ def to_u16(val):
     """负数转U16输出，两补码，正数不变"""
     return (val + 0x10000) & 0xFFFF if val < 0 else val
 
+# 风扇状态处理函数
 def process_fan_state(
         fan_cfg: dict,
         registers: dict,
@@ -599,6 +601,7 @@ def process_fan_state(
         "state": state,
     }
 
+# 水泵状态处理
 def process_pump_state(
         pump_cfg: dict,
         registers: dict,
@@ -693,6 +696,7 @@ def process_pump_state(
         "temperature": int(temperature),
     }
 
+# 比例阀状态处理
 def process_proportional_valve_state(
     pv_cfg: dict,
     registers: dict,
@@ -781,6 +785,7 @@ def process_temperature_state(sensor_cfg, registers, sensor_index, now=None):
     gain1 = float(sensor_cfg.get("gain1", 1))
     gain2 = float(sensor_cfg.get("gain2", 1))
     gain3 = float(sensor_cfg.get("gain3", 1))
+    decimals = int(sensor_cfg.get("r_d_temperature_decimals", 1))
     calc_val = (raw_val + offset1 + offset2) * gain1 * gain2 * gain3
     calc_val_int = int(round(calc_val))
 
@@ -791,7 +796,7 @@ def process_temperature_state(sensor_cfg, registers, sensor_index, now=None):
     # 状态: 0=传感器故障，1=正常，2=低于下限，3=高于上限
     key = f"T_{sensor_index}"
     state = 1
-    if calc_val > 200 or calc_val < -100:
+    if calc_val > 2000 or calc_val < -1000:
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
@@ -801,7 +806,8 @@ def process_temperature_state(sensor_cfg, registers, sensor_index, now=None):
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
             state = 2
-    elif calc_val > max_v:
+    # 此处温度值为保留一位小数值的温度，因此需要缩放10倍
+    elif calc_val > (max_v * 10**decimals):
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
@@ -810,11 +816,13 @@ def process_temperature_state(sensor_cfg, registers, sensor_index, now=None):
         state = 1
         _fault_time["sensor"][key] = 0
 
-    #
+    # 写入“处理后寄存器映射”的新地址区间
     u16_calc_val_int = to_u16(calc_val_int)
     processed_reg_map.set_register(TEMP_VALUE_START + sensor_index, u16_calc_val_int)
     processed_reg_map.set_register(TEMP_DIFF_START + sensor_index, 0)
     processed_reg_map.set_register(TEMP_STATUS_START + sensor_index, state)
+
+    # print(f"Temp Sensor {sensor_index}: Raw={raw_val}, Calc={calc_val:.2f}, State={state}")
 
     return {
         "value": u16_calc_val_int,
@@ -855,7 +863,7 @@ def process_pressure_state(sensor_cfg, registers, sensor_index, now=None):
     # 状态判定（带 8s 延时）
     state = 1
     key = f"P_{sensor_index}"
-    if calc_val < 0.5:
+    if calc_val_int < -50:
         # 近零判为可能断线/故障，需 8s 确认
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
@@ -863,14 +871,14 @@ def process_pressure_state(sensor_cfg, registers, sensor_index, now=None):
             state = 0
         else:
             state = 1
-    elif calc_val < min_v:
+    elif calc_val_int < min_v:
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
             state = 2
         else:
             state = 1
-    elif calc_val > max_v:
+    elif calc_val_int > (max_v * 10**decimals):
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
@@ -885,6 +893,8 @@ def process_pressure_state(sensor_cfg, registers, sensor_index, now=None):
     u16_calc_val_int = to_u16(calc_val_int)
     processed_reg_map.set_register(PRESS_VALUE_START + sensor_index, int(u16_calc_val_int))
     processed_reg_map.set_register(PRESS_STATUS_START + sensor_index, int(state))
+
+    # print(f"Pressure Sensor {sensor_index}: Raw={raw_val}, Calc={calc_val:.2f}, State={state}")
 
     return {
         "name": name,
@@ -925,7 +935,7 @@ def process_flow_state(sensor_cfg, registers, sensor_index, now=None):
     # 状态判定（带 8s 延时）
     state = 1
     key = f"F_{sensor_index}"
-    if calc_val < 0.5:
+    if calc_val < -20:
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
@@ -954,6 +964,8 @@ def process_flow_state(sensor_cfg, registers, sensor_index, now=None):
     u16_calc_val_int = to_u16(calc_val_int)
     processed_reg_map.set_register(FLOW_VALUE_START + sensor_index, int(u16_calc_val_int))
     processed_reg_map.set_register(FLOW_STATUS_START + sensor_index, int(state))
+
+    # print(f"Flow Sensor {sensor_index}: Raw={raw_val}, Calc={calc_val:.2f}, State={state}")
 
     return {
         "name": name,
@@ -1014,6 +1026,8 @@ def process_ph_state(sensor_cfg: dict, registers: dict, sensor_index: int, now: 
     processed_reg_map.set_register(PH_VALUE_START + sensor_index, u16_calc_val_int)
     processed_reg_map.set_register(PH_STATUS_START + sensor_index, state)
 
+    # print(f"PH Sensor {sensor_index}: Raw={raw_val}, Calc={calc_val:.2f}, State={state}")
+
     return {
         "name": sensor_cfg.get("name", "PH"),
         "value": u16_calc_val_int,
@@ -1051,28 +1065,62 @@ def process_environment_state(sensor_cfg, registers, sensor_index, now=None):
     # 状态判定逻辑
     key = f"PHT_{sensor_index}"
     state = 1
-    if calc_val > 200 or calc_val < -100:
+
+    # 每个传感器的独立判定参数（可根据需要调整）
+    # extreme\_low/high：极端值视为传感器故障的保护范围
+    # min/max：上下限超界的报警范围（优先使用配置中的 min\_pht/max\_pht）
+    rules = {
+        1: {  # 温度
+            "extreme_low": -100.0, "extreme_high": 200.0,
+            "default_min": 0.0, "default_max": 60.0,
+        },
+        2: {  # 湿度
+            "extreme_low": -10.0, "extreme_high": 100.0,
+            "default_min": 0.0, "default_max": 80.0,
+        },
+        3: {  # 露点
+            "extreme_low": -50.0, "extreme_high": 80.0,
+            "default_min": -20.0, "default_max": 50.0,
+        },
+    }
+    r = rules.get(sensor_index, {
+        "extreme_low": -100.0, "extreme_high": 200.0,
+        "default_min": float(sensor_cfg.get("min_pht", -273)),
+        "default_max": float(sensor_cfg.get("max_pht", 999)),
+    })
+
+    extreme_low = float(r["extreme_low"])
+    extreme_high = float(r["extreme_high"])
+    min_v = float(sensor_cfg.get("min_pht", r["default_min"]))
+    max_v = float(sensor_cfg.get("max_pht", r["default_max"]))
+
+    # 先做极端值的传感器故障保护（延时8秒确认）
+    if calc_val > (extreme_high * 10**decimals) or calc_val < (extreme_low * 10**decimals):
         if _fault_time["sensor"].get(key, 0) == 0:
             _fault_time["sensor"][key] = now
         elif now - _fault_time["sensor"][key] >= 8:
             state = 0
-    elif calc_val < min_v:
-        if _fault_time["sensor"].get(key, 0) == 0:
-            _fault_time["sensor"][key] = now
-        elif now - _fault_time["sensor"][key] >= 8:
-            state = 2
-    elif calc_val > max_v:
-        if _fault_time["sensor"].get(key, 0) == 0:
-            _fault_time["sensor"][key] = now
-        elif now - _fault_time["sensor"][key] >= 8:
-            state = 3
     else:
-        state = 1
-        _fault_time["sensor"][key] = 0
+        # 各自的上下限报警（延时8秒确认），正常清零故障计时
+        if calc_val < min_v:
+            if _fault_time["sensor"].get(key, 0) == 0:
+                _fault_time["sensor"][key] = now
+            elif now - _fault_time["sensor"][key] >= 8:
+                state = 2
+        elif calc_val > (max_v * 10**decimals):
+            if _fault_time["sensor"].get(key, 0) == 0:
+                _fault_time["sensor"][key] = now
+            elif now - _fault_time["sensor"][key] >= 8:
+                state = 3
+        else:
+            state = 1
+            _fault_time["sensor"][key] = 0
 
     u16_calc_val_int = to_u16(calc_val_int)
     processed_reg_map.set_register(ENVIRONMENT_VALUE_START + sensor_index, u16_calc_val_int)
     processed_reg_map.set_register(ENVIRONMENT_STATUS_START + sensor_index, state)
+
+    # print(f"Environment Sensor {sensor_index}: Raw={raw_val}, Calc={calc_val:.2f}, State={state}")
 
     return {
         "value": u16_calc_val_int,
@@ -1188,6 +1236,73 @@ def get_cooling_capacity(reg_map=None):
 
     return u16_scaled
 
+# Input状态处理
+def process_io_input_state(
+        input_cfg: dict,
+        coils: dict,
+        input_index: int,
+        now=None):
+    """
+    Input状态处理（只读）
+    - 开关读取：线圈 COIL_IO_INPUT_READ_START + idx
+    说明：
+    - 读源数据从原始线圈地址（配置）获取；
+    - 处理后写入到新处理映射 processed_reg_map 的IO输入读取区域；
+    """
+    if now is None:
+        now = time.time()
+
+    # 读取原始Input状态（从配置中的地址）
+    status_addr = input_cfg.get("r_b_input_address", {}).get("local")
+    status_val = coils.get(status_addr, 0) if status_addr is not None else 0
+
+    # 写入到处理后寄存器映射的读取区域
+    read_coil_addr = COIL_IO_INPUT_READ_START + input_index
+    processed_reg_map.set_coil(read_coil_addr, status_val)
+
+    # 调试信息
+    # print(f"[ControlLogic] DEBUG: process_input_state - index={input_index}, raw_addr={status_addr}, value={status_val}, read_addr={read_coil_addr}")
+
+    return {
+        "status": status_val,
+        "coil_address": read_coil_addr,
+        "raw_address": status_addr,
+        "index": input_index,
+    }
+
+# IO Output状态处理
+def process_io_output_state(
+        iooutput_cfg: dict,
+        coils: dict,
+        iooutput_index: int,
+        now=None):
+    """
+    IO Output状态处理
+    - 开关读取：线圈 COIL_IO_OUTPUT_READ_START + idx
+    说明：
+    - 读源数据从原始线圈地址（配置）获取；
+    - 处理后写入到新处理映射 processed_reg_map 的新分段地址；
+    """
+    if now is None:
+        now = time.time()
+
+    # 读取原始IO Output状态（从配置中的地址）
+    status_addr = iooutput_cfg.get("rw_b_output_address", {}).get("local")
+    status_val = coils.get(status_addr, 0) if status_addr is not None else 0
+
+    # 写入到处理后寄存器映射的读取区域
+    read_coil_addr = COIL_IO_OUTPUT_READ_START + iooutput_index
+    processed_reg_map.set_coil(read_coil_addr, status_val)
+
+    # print(f"[ControlLogic] DEBUG: process_io_output_state - index={iooutput_index}, raw_addr={status_addr}, value={status_val}, read_addr={read_coil_addr}")
+
+    return {
+        "status": status_val,
+        "coil_address": read_coil_addr,
+        "raw_address": status_addr,
+        "index": iooutput_index,
+    }
+
 # 风扇寄存器值获取
 def get_all_fan_states(reg_map) -> list:
     fans = CONFIG_CACHE.get("fans", [])
@@ -1248,6 +1363,30 @@ def get_all_sensor_states(reg_map) -> list:
             continue
 
     return results
+
+# IO Input线圈值获取
+def get_all_io_input_states(reg_map) -> list:
+    """
+    获取所有Input的状态（只读）
+    """
+    inputs = CONFIG_CACHE.get("input", [])
+    now = time.time()
+    return [
+        process_io_input_state(input_cfg["config"], reg_map.coils, i, now)
+        for i, input_cfg in enumerate(inputs)
+    ]
+
+# IO Output线圈值获取
+def get_all_io_output_states(reg_map) -> list:
+    """
+    获取所有IO Output的状态
+    """
+    iooutputs = CONFIG_CACHE.get("output", [])
+    now = time.time()
+    return [
+        process_io_output_state(iooutput["config"], reg_map.coils, i, now)
+        for i, iooutput in enumerate(iooutputs)
+    ]
 
 # 第一次同步时，将写入寄存器的值也同步，避免程序启动后写入寄存器的值和实际值不匹配
 def _sync_read_to_write_registers_once():
@@ -1347,6 +1486,8 @@ def start_processed_register_sync(get_register_map_func, interval=0.15):
             get_all_pump_states(reg_map)
             get_all_proportional_valve_states(reg_map)
             get_all_sensor_states(reg_map)
+            get_all_io_output_states(reg_map)
+            get_all_io_input_states(reg_map)
             get_pressure_diff(processed_reg_map)
             get_temperature_diff(processed_reg_map)
             get_cooling_capacity(processed_reg_map)
@@ -1614,6 +1755,60 @@ def write_pv_duty(pv_index: int, duty: int, slave: int = 1, priority: int = 0, f
     # print(f"[ControlLogic] INFO: PV duty submit (force={force}): {pv_name}={duty}, result={result}")
     return result
 
+# IO Output输出线圈写入函数
+def write_io_output(iooutput_index: int, switch_on: int, slave: int = 1, priority: int = 0, force: bool = False):
+    """
+    写入IO Output输出（线圈）到本地寄存器表，并同步写入到PCBA实际寄存器
+    1. 先判断写入使能寄存器（COIL_WRITE_ENABLE）是否为1，若为0则禁止写入
+    2. 写入本地寄存器表（COIL_IO_OUTPUT_WRITE_START + iooutput_index）
+    3. 查找iooutput配置，获取可写线圈字段
+    4. 调用ComponentOperationTaskManager写入PCBA
+    """
+
+    from cdu120kw.service_function.controller_app import app_controller
+    component_task_mgr = app_controller.component_task_manager
+
+    # 步骤1：判断写入使能，延迟关停风扇时允许强制写入
+    if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
+        print("[ControlLogic] WARNING: IO Output write denied: write enable=0")
+        return False
+
+    # # 步骤2：写入本地寄存器
+    # coil_addr = COIL_IO_OUTPUT_WRITE_START + iooutput_index
+    # processed_reg_map.set_coil(coil_addr, switch_on)
+    # print(f"[ControlLogic] INFO: Local IO Output written: addr={coil_addr}, value={switch_on}")
+
+    # 步骤3：查找IO Output配置
+    iooutput_list = CONFIG_CACHE.get("output", [])
+    if iooutput_index >= len(iooutput_list):
+        print(f"[ControlLogic] WARNING: IO Output index {iooutput_index} out of range")
+        return False
+    iooutput_name = iooutput_list[iooutput_index]["name"]
+
+    param = component_task_mgr.param_mgr.get_param(iooutput_name)
+    if not param:
+        print(f"[ControlLogic] WARNING: IO Output config not found: {iooutput_name}")
+        return False
+
+    field = None
+    for k, v in param.writable_fields.items():
+        if v[0] == "coil":
+            field = k
+            break
+    if not field:
+        print(f"[ControlLogic] WARNING: No writable coil field for IO Output: {iooutput_name}")
+        return False
+
+    # 步骤4：写入PCBA
+    result = component_task_mgr.operate_component(
+        name=iooutput_name,
+        value_dict={field: int(switch_on)},
+        slave=slave,
+        priority=priority
+    )
+    # print(f"[ControlLogic] INFO: IO Output submit (force={force}): {iooutput_name}={switch_on}, result={result}")
+    return result
+
 # 水泵批量占空比写入函数
 def batch_write_pump_duty(duty: int, slave: int = 1, priority: int = 0, force: bool = False):
     """
@@ -1696,59 +1891,49 @@ def batch_write_pv_duty(duty: int, slave: int = 1, priority: int = 0, force: boo
 # 比例阀初始化重入保护标志
 batch_write_pv_duty._executing = False
 
-# IO Output输出线圈写入函数
-def write_io_output(iooutput_index: int, switch_on: int, slave: int = 1, priority: int = 0, force: bool = False):
+# IO Output批量写入函数
+def batch_write_io_outputs(output_dict: dict, slave: int = 1, priority: int = 0, force: bool = False):
     """
-    写入IO Output输出（线圈）到本地寄存器表，并同步写入到PCBA实际寄存器
-    1. 先判断写入使能寄存器（COIL_WRITE_ENABLE）是否为1，若为0则禁止写入
-    2. 写入本地寄存器表（COIL_IO_OUTPUT_WRITE_START + iooutput_index）
-    3. 查找iooutput配置，获取可写线圈字段
-    4. 调用ComponentOperationTaskManager写入PCBA
+    IO Output批量写入函数
+    通过设置多个IO Output的单个写入寄存器来触发回调，实现批量写入
     """
-
-    from cdu120kw.service_function.controller_app import app_controller
-    component_task_mgr = app_controller.component_task_manager
-
-    # 步骤1：判断写入使能，延迟关停风扇时允许强制写入
-    if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
-        print("[ControlLogic] WARNING: IO Output write denied: write enable=0")
+    # 重入保护
+    if getattr(batch_write_io_outputs, '_executing', False):
+        print("[ControlLogic] WARNING: IO Output batch write reentrancy detected")
         return False
 
-    # # 步骤2：写入本地寄存器
-    # coil_addr = COIL_IO_OUTPUT_WRITE_START + iooutput_index
-    # processed_reg_map.set_coil(coil_addr, switch_on)
-    # print(f"[ControlLogic] INFO: Local IO Output written: addr={coil_addr}, value={switch_on}")
+    batch_write_io_outputs._executing = True
 
-    # 步骤3：查找IO Output配置
-    iooutput_list = CONFIG_CACHE.get("output", [])
-    if iooutput_index >= len(iooutput_list):
-        print(f"[ControlLogic] WARNING: IO Output index {iooutput_index} out of range")
-        return False
-    iooutput_name = iooutput_list[iooutput_index]["name"]
+    try:
+        # 检查写入使能
+        if not force and processed_reg_map.get_coil(COIL_WRITE_ENABLE) != 1:
+            print("[ControlLogic] WARNING: IO Output batch write denied: write enable=0")
+            return False
 
-    param = component_task_mgr.param_mgr.get_param(iooutput_name)
-    if not param:
-        print(f"[ControlLogic] WARNING: IO Output config not found: {iooutput_name}")
-        return False
+        # 获取IO Output列表
+        iooutput_list = CONFIG_CACHE.get("output", [])
+        if not iooutput_list:
+            print("[ControlLogic] INFO: No IO Outputs configured for batch write")
+            return False
 
-    field = None
-    for k, v in param.writable_fields.items():
-        if v[0] == "coil":
-            field = k
-            break
-    if not field:
-        print(f"[ControlLogic] WARNING: No writable coil field for IO Output: {iooutput_name}")
-        return False
+        # print(f"[ControlLogic] INFO: Starting batch write for {len(output_dict)} IO Outputs")
 
-    # 步骤4：写入PCBA
-    result = component_task_mgr.operate_component(
-        name=iooutput_name,
-        value_dict={field: int(switch_on)},
-        slave=slave,
-        priority=priority
-    )
-    # print(f"[ControlLogic] INFO: IO Output submit (force={force}): {iooutput_name}={switch_on}, result={result}")
-    return result
+        for iooutput_index, switch_on in output_dict.items():
+            if iooutput_index >= len(iooutput_list):
+                print(f"[ControlLogic] WARNING: IO Output index {iooutput_index} out of range")
+                continue
+
+            write_addr = COIL_IO_OUTPUT_WRITE_START + iooutput_index
+            processed_reg_map.set_coil(write_addr, 1 if switch_on else 0)
+
+        # print(f"[ControlLogic] INFO: Batch write completed - {len(output_dict)} registers updated")
+        return True
+
+    finally:
+        batch_write_io_outputs._executing = False
+
+# IO Output初始化重入保护标志
+batch_write_io_outputs._executing = False
 
 # HMI写入触发回调函数
 def hmi_write_trigger(address: int, value: int):
@@ -1818,23 +2003,35 @@ def hmi_write_trigger(address: int, value: int):
         #             pv_index, address, int(value))
         return
 
-    # 水泵批量占空比写入寄存器
-    if address == PUMP_BATCH_DUTY_REGISTER:
-        batch_write_pump_duty(value)
-        # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
-        return
-    # 水泵批量占空比写入寄存器
-    if address == PV_BATCH_DUTY_REGISTER:
-        batch_write_pv_duty(value)
-        # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
-        return
-
     # IO Output写入区
     if COIL_IO_OUTPUT_WRITE_START <= address < COIL_IO_OUTPUT_WRITE_END:
         iooutput_index = address - COIL_IO_OUTPUT_WRITE_START
         write_io_output(iooutput_index, value)
         # print("[ControlLogic] INFO: IO Output: idx=%s addr=%s value=%s",
         #             iooutput_index, address, int(value))
+        return
+
+    # 水泵批量占空比写入寄存器
+    if address == PUMP_BATCH_DUTY_REGISTER:
+        batch_write_pump_duty(value)
+        # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
+        return
+
+    # 比例阀批量占空比写入寄存器
+    if address == PV_BATCH_DUTY_REGISTER:
+        batch_write_pv_duty(value)
+        # print("[ControlLogic] INFO: Pump batch duty triggered: addr=%s duty=%s", address, int(value))
+        return
+
+    if address == IO_OUTPUT_BATCH_SWITCH_COIL:
+        iooutput_list = CONFIG_CACHE.get("output", [])
+        output_dict = {}
+
+        for i in range(len(iooutput_list)):
+            output_dict[i] = 1 if value else 0
+
+        batch_write_io_outputs(output_dict)
+        # print(f"[ControlLogic] INFO: IO Output batch switch triggered: addr={address}, value={value}, {len(output_dict)} outputs")
         return
 
 # 注册写入回调
